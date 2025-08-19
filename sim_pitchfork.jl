@@ -3,6 +3,7 @@ Julia code to simulate pitchfork bifurcation normal form forced by colored noise
 
 Jared Callaham (2020)
 """
+
 using DifferentialEquations
 using MAT
 

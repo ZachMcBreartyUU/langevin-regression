@@ -3,6 +3,7 @@ Julia code to simulate 1D particle in a double-well potential
 
 Jared Callaham (2020)
 """
+
 using DifferentialEquations
 
 # Noisy double well potential
