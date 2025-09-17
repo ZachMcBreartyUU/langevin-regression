@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from kramersmoyal import km
 
-from my_kramers_moyal import km_log_bins
+from kramers_moyal_log import km_log_bins
 import data_loader as dl
 
 ap = argparse.ArgumentParser()
