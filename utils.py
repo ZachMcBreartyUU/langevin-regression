@@ -198,14 +198,14 @@ def cost(Xi, params):
 
     # Solve AFP equation to find finite-time corrected drift/diffusion
     #    corresponding to the current parameters Xi
-    afp.precompute_operator(np.reshape(f_vals, N), np.reshape(a_vals, N))
-    f_tau, a_tau = afp.solve(params["tau"])
+    # afp.precompute_operator(np.reshape(f_vals, N), np.reshape(a_vals, N))
+    # f_tau, a_tau = afp.solve(params["tau"])
 
     # Histogram points without data have NaN values in K-M average - ignore these in the average
     mask = np.nonzero(np.isfinite(f_KM))[0]
-    V = np.sum(W[0, mask] * abs(f_tau[mask] - f_KM[mask]) ** 2) + np.sum(
-        W[1, mask] * abs(a_tau[mask] - a_KM[mask]) ** 2
-    )
+    V = np.sum(
+        W[0, mask] * abs((f_vals[mask] - f_KM[mask]) / f_KM[mask]) ** 2
+    ) + np.sum(W[1, mask] * abs((a_vals[mask] - a_KM[mask]) / a_KM) ** 2)
 
     # Include PDF constraint via Kullbeck-Leibler divergence regularization
     if params["kl_reg"] > 0:
