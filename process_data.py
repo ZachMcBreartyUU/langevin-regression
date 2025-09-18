@@ -51,6 +51,13 @@ if args.plot_intermediate:
     else:
         fig.savefig(folder_path / "system_graph_f.png")
 
+sigma: np.ndarray
+min_sigma = sigma.min()
+max_sigma = sigma.max()
+avg_sigma = sigma.mean()
+std_sigma = sigma.std()
+sigma_data = np.array([min_sigma, max_sigma, avg_sigma, std_sigma])
+
 if args.log_spacing:
     fluidity = phi**2
     data = fluidity[fluidity > np.exp(args.cutoff)]
@@ -79,6 +86,7 @@ if args.log_spacing:
         edges=edges,
         centers=centers,
         widths=widths,
+        sigma_data=sigma_data,
     )
 else:
     fluidity = phi**2
@@ -103,4 +111,5 @@ else:
         edges=edges,
         centers=centers,
         widths=widths,
+        sigma_data=sigma_data,
     )
