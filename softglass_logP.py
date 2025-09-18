@@ -47,29 +47,33 @@ with np.load(folder_path / "km_log_spacing.npz") as file:
     edges = file["edges"]
     centers = file["centers"]
     widths = file["widths"]
-sigma_avg = metadata["max_sigma"]
+    sigma_data = file["sigma_data"]
+sigma_min, sigma_max, sigma_avg, sigma_std = sigma_data
 
 N = len(centers)
 
 if args.plot_intermediate:
-    fig, axes = plt.subplots(3, figsize=(12, 12))
+    fig, axes = plt.subplots(2, figsize=(12, 12))
     axes: list[plt.Axes]  # type: ignore
-    axes[0].plot(centers, pdf, label=rf"$\tau={dt}$")
+    axes[0].plot(centers, pdf)
     axes[0].set_ylabel(r"PDF($f$)")
-    axes[0].set_xlabel(r"f, $f$")
-    axes[0].legend()
+    axes[0].set_xlabel(r"fluidity, $f$")
 
-    axes[1].plot(centers, A_km, label=rf"$\tau={dt}$")
-    axes[1].plot(centers, A(centers, sigma_avg), label="$A(f)$")
-    axes[1].set_ylabel(r"First moment, $m^{(1)}(f)$")
-    axes[1].set_xlabel(r"f, $f$")
-    axes[1].legend()
+    axes[1].plot(np.log(centers), np.log(pdf))
+    axes[1].set_ylabel(r"log PDF($f$)")
+    axes[1].set_xlabel(r"log fluidity, $\log f$")
 
-    axes[2].plot(centers, C_km, label=rf"$\tau={dt}$")
-    axes[2].plot(centers, B(centers, sigma_avg) ** 2 / 2, label="$B(f)^2/2$")
-    axes[2].set_ylabel(r"Second moment, $m^{(2)}(f)$")
-    axes[2].set_xlabel(r"f, $f$")
-    axes[2].legend()
+    # axes[1].plot(centers, A_km, label=rf"$\tau={dt}$")
+    # axes[1].plot(centers, A(centers, sigma_avg), label="$A(f)$")
+    # axes[1].set_ylabel(r"First moment, $m^{(1)}(f)$")
+    # axes[1].set_xlabel(r"fluidity, $f$")
+    # axes[1].legend()
+
+    # axes[2].plot(centers, C_km, label=rf"$\tau={dt}$")
+    # axes[2].plot(centers, B(centers, sigma_avg) ** 2 / 2, label="$B(f)^2/2$")
+    # axes[2].set_ylabel(r"Second moment, $m^{(2)}(f)$")
+    # axes[2].set_xlabel(r"fluidity, $f$")
+    # axes[2].legend()
 
     fig.tight_layout()
 
@@ -262,7 +266,29 @@ if np.ndim(C_vals) == 0:
 fig, (ax, ax2) = plt.subplots(ncols=2, figsize=(12, 6))
 ax: plt.Axes  # type: ignore
 ax2: plt.Axes  # type: ignore
-ax.plot(centers, A(centers, sigma_avg), c="gray", lw=2, label="True drift")
+# ax.plot(
+#     centers, A(centers, sigma_min), c="gray", lw=1, alpha=0.5, label="True: min sigma"
+# )
+# ax.plot(
+#     centers, A(centers, sigma_max), c="gray", lw=1, alpha=0.5, label="True: max sigma"
+# )
+# ax.plot(
+#     centers,
+#     A(centers, sigma_avg + sigma_std),
+#     c="gray",
+#     lw=2,
+#     alpha=0.5,
+#     label="True: +1 std",
+# )
+# ax.plot(
+#     centers,
+#     A(centers, sigma_avg - sigma_std),
+#     c="gray",
+#     lw=2,
+#     alpha=0.5,
+#     label="True: -1 std",
+# )
+# ax.plot(centers, A(centers, sigma_avg), c="gray", lw=2, label="True: average")
 ax.plot(centers, A_km, ls="", marker=".", markersize=8, c="b", label="KM")
 ax.plot(centers, A_vals, "r", lw=2, label="SINDy")
 # ax.plot(centers, f_tau, "g:", lw=2, label=rf"$\tau = {dt}$")
