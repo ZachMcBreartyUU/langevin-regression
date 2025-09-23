@@ -1,0 +1,30 @@
+import subprocess
+
+# relative to SCRATCH_PATH in data_loader.py
+EQN_LEARN_PATH = "runs_EqnLearning/"
+
+for foldername in [
+    # "run_0D_0D_5_1_const_3",
+    # "run_0D_0D_5_1_const_4",
+    # "run_0D_0D_5_1_const_35",
+    # "run_0D_0D_5_1_const_37",
+    "run_0D_0D_5_1_000",
+    "run_0D_0D_5_1_004",
+    "run_0D_0D_6_1_000",
+    "run_0D_0D_6_1_004",
+]:
+    folder = EQN_LEARN_PATH + foldername
+    subprocess.run(
+        [
+            "sbatch",
+            "-o",
+            f"/scratch/seismology/zach/{folder}_log_f_s.out",
+            "-e",
+            f"/scratch/seismology/zach/{folder}_log_f_s.err",
+            "/eejit/home/zach/LearningSoftglassEqns/Langevin_regression_method/langevin-regression/softglass_logP_f_s.slurm",
+            folder,
+            "--kl-reg",
+            "0",
+            "--plot-intermediate",
+        ]
+    )
