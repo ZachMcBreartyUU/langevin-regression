@@ -84,13 +84,13 @@ f_sym = sympy.symbols("f")
 
 # A library:      [  1, f^1/2,     f^2/2, f^3/2, f^4/2, f^5/2]
 # expected coeff: [ep0,     0, -2R + ep1,     0,    2m,    -2]
-A_f_expr = np.array([f_sym ** (i / 2) for i in np.arange(6)])
+A_f_expr = np.array([f_sym ** (i / 2) for i in range(6)])
 print("A_f library:", A_f_expr)
 num_A_f = len(A_f_expr)
 
-# a library:      [1,   f, f^2]
-# expected coeff: [0, ep0, ep1]
-C_f_expr = np.array([f_sym ** (i) for i in np.arange(0, 3)])
+# a library:      [1,   f, f^2, f^3, f^4]
+# expected coeff: [0, ep0, ep1,   0,   0]
+C_f_expr = np.array([f_sym ** (i) for i in range(0, 5)])
 print("a_f library:", C_f_expr)
 num_C_f = len(C_f_expr)
 
