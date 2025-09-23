@@ -125,9 +125,9 @@ A_f_expr = np.array(
 print("A_f library:", A_f_expr)
 num_A_f = len(A_f_expr)
 
-# C_f library:    [1,   f, f^2, f^3]
-# expected coeff: [0, ep0, ep1,   0]
-C_f_expr = np.array([f_sym ** (i) for i in np.arange(3)])
+# C_f library:    [1,   f, f^2, f^3, f^4]
+# expected coeff: [0, ep0, ep1,   0,   0]
+C_f_expr = np.array([f_sym ** (i) for i in range(5)])
 print("C_f library:", C_f_expr)
 num_C_f = len(C_f_expr)
 
