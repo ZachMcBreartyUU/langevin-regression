@@ -7,11 +7,13 @@ The size of the libraries matters _greatly_ as they are constantly inverted, thi
 
 import argparse
 import json
+from time import time
 
 import numpy as np
 from numpy.linalg import lstsq
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # typing for 3D plots
+from scipy.optimize import minimize
 import sympy
 
 import utils
@@ -169,9 +171,6 @@ mask = np.nonzero(A_s_km)[0]  # This mask may actually be the same as previous
 Xi0[num_A_f + num_C_f :] = lstsq(lib_A_s[:, mask].T, A_s_km[mask])[0]
 print("Xi0 =", Xi0)
 # NOTE: are these initial conditions good enough for highly non-linear systems?
-
-from time import time
-from scipy.optimize import minimize
 
 
 # FUNCTIONS ADAPTED TO 2D:
