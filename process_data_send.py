@@ -18,9 +18,9 @@ for foldername in [
         [
             "sbatch",
             "-o",
-            f"/scratch/seismology/zach/{folder}.out",
+            f"/scratch/seismology/zach/{folder}_process.out",
             "-e",
-            f"/scratch/seismology/zach/{folder}.err",
+            f"/scratch/seismology/zach/{folder}_process.err",
             "/eejit/home/zach/LearningSoftglassEqns/Langevin_regression_method/langevin-regression/process_data.slurm",
             folder,
             "-N",
