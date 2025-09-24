@@ -420,7 +420,7 @@ A_f_sindy = sympy.lambdify((f_sym, s_sym), A_f_sym)
 A_s_sym = utils.sindy_model(Xi_A_s, A_s_expr)
 A_s_sindy = sympy.lambdify((f_sym, s_sym), A_s_sym)
 C_f_sym = utils.sindy_model(Xi_C_f, C_f_expr)
-C_f_sindy = sympy.lambdify(f_sym, C_f_sym)
+C_f_sindy = sympy.lambdify((f_sym, s_sym), C_f_sym)
 
 print(f"df = ({A_f_sym}) dt + ({sympy.sqrt(2*C_f_sym)}) dbeta")
 print(f"dσ = ({A_s_sym}) dt", flush=True)
