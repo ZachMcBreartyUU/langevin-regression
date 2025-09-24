@@ -435,17 +435,17 @@ C_f_sindy = sympy.lambdify((f_sym, s_sym), C_f_sym)
 print(f"df = ({A_f_sym}) dt + ({sympy.sqrt(2*C_f_sym)}) dbeta")
 print(f"dσ = ({A_s_sym}) dt", flush=True)
 
-A_f_vals = A_f_sindy(centers_f, centers_s)
-A_s_vals = A_s_sindy(centers_f, centers_s)
-C_f_vals = C_f_sindy(centers_f, centers_s)
+A_f_vals = A_f_sindy(f_mesh, s_mesh)
+A_s_vals = A_s_sindy(f_mesh, s_mesh)
+C_f_vals = C_f_sindy(f_mesh, s_mesh)
 
 # Check if a scalar (happens when library is a constant)
 if np.ndim(A_f_vals) == 0:
-    A_f_vals = A_f_vals + 0 * centers_f
+    A_f_vals = A_f_vals + 0 * f_mesh
 if np.ndim(A_s_vals) == 0:
-    A_s_vals = A_s_vals + 0 * centers_f
+    A_s_vals = A_s_vals + 0 * f_mesh
 if np.ndim(C_f_vals) == 0:
-    C_f_vals = C_f_vals + 0 * centers_f
+    C_f_vals = C_f_vals + 0 * f_mesh
 
 A_f_km = A_f_km.reshape(N, M)
 C_f_km = C_f_km.reshape(N, M)
@@ -456,20 +456,20 @@ fig_km_vals, axes_km_vals = plt.subplots(
 )
 axes_km_vals: list[list[Axes3D]]
 # axes_km_vals[0][0].plot_wireframe(centers_f, centers_s, A_f_km, label="KM")
-axes_km_vals[0][0].plot_wireframe(centers_f, centers_s, A_f_vals)  # , label="SINDy")
+axes_km_vals[0][0].plot_wireframe(f_mesh, s_mesh, A_f_vals)  # , label="SINDy")
 axes_km_vals[0][0].set_zlabel(r"$A_{f}(f, \sigma)$")
 
 # axes_km_vals[0][1].plot_wireframe(centers_f, centers_s, A_s_km, label="KM")
-axes_km_vals[0][1].plot_wireframe(centers_f, centers_s, A_s_vals)  # , label="SINDy")
+axes_km_vals[0][1].plot_wireframe(f_mesh, s_mesh, A_s_vals)  # , label="SINDy")
 axes_km_vals[0][1].set_zlabel(r"$A_{\sigma}(f, \sigma)$")
 
 # axes_km_vals[1][0].plot_wireframe(centers_f, centers_s, C_f_km, label="KM")
-axes_km_vals[1][0].plot_wireframe(centers_f, centers_s, C_f_vals)  # , label="SINDy")
+axes_km_vals[1][0].plot_wireframe(f_mesh, s_mesh, C_f_vals)  # , label="SINDy")
 axes_km_vals[1][0].set_zlabel(r"$C_{f}(f, \sigma) = B_{f}^2 / 2$")
 
 # axes_km_vals[1][1].plot_wireframe(centers_f, centers_s, C_s_km, label="KM")
 axes_km_vals[1][1].plot_wireframe(
-    centers_f, centers_s, np.zeros_like(centers_f)
+    f_mesh, s_mesh, np.zeros_like(centers_f)
 )  # , label="SINDy")
 axes_km_vals[1][1].set_zlabel(r"$C_{\sigma}(f, \sigma) = B_{\sigma}^2 / 2$")
 
