@@ -257,6 +257,7 @@ def km_log_bins_2(
     kernel: Callable = epanechnikov,
     bw: Optional[float] = None,
     tol: float = 1e-10,
+    tol_nan=False,
     conv_method: str = "auto",
     center_edges: bool = True,
     full: bool = False,
@@ -424,7 +425,7 @@ def km_log_bins_2(
 
     # This is where the calculations take place
     kmc, edges = _km_log_bins_2(
-        timeseries, bins, which_log, powers, kernel, bw, tol, conv_method
+        timeseries, bins, which_log, powers, kernel, bw, tol, tol_nan, conv_method
     )
 
     if center_edges:
@@ -444,6 +445,7 @@ def _km_log_bins_2(
     kernel: Callable,
     bw: float,
     tol: float,
+    tol_nan: bool,
     conv_method: str,
 ) -> Tuple[np.ndarray, list[np.ndarray]]:
     """
@@ -479,7 +481,7 @@ def _km_log_bins_2(
 
     # Normalise
     mask = np.abs(kmc[0]) < tol
-    kmc[0:, mask] = 0.0
+    kmc[0:, mask] = np.nan if tol_nan else 0.0
     taylors = np.prod(factorial(powers[1:]), axis=1)
     kmc[1:, ~mask] /= taylors[..., None] * kmc[0, ~mask]
 
