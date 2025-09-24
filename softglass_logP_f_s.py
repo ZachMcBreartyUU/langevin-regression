@@ -62,6 +62,13 @@ with np.load(folder_path / "km_log_f_s.npz") as file:
     centers_s = file["sigma_centers"]
     widths_s = file["sigma_widths"]
 
+nan_mask = np.isfinite(pdf.flatten())
+pdf_masked = pdf.flatten()[nan_mask]
+A_f_km_masked = A_f_km.flatten()[nan_mask]
+C_f_km_masked = C_f_km.flatten()[nan_mask]
+A_s_km_masked = A_s_km.flatten()[nan_mask]
+C_s_km_masked = C_s_km.flatten()[nan_mask]
+
 f_mesh, s_mesh = np.meshgrid(centers_f, centers_s)
 
 N = len(centers_f)
@@ -145,32 +152,30 @@ lib_A_f = np.empty((num_A_f, N, M))
 for k in range(num_A_f):
     lamb_expr = sympy.lambdify([f_sym, s_sym], A_f_expr[k])
     lib_A_f[k] = lamb_expr(centers_f, centers_s)
-lib_A_f = lib_A_f.reshape(-1, N * M)
+lib_A_f = lib_A_f.reshape(-1, N * M)[..., nan_mask]
 
 lib_C_f = np.empty((num_C_f, N, M))
 for k in range(num_C_f):
     lamb_expr = sympy.lambdify([f_sym, s_sym], C_f_expr[k])
     lib_C_f[k] = lamb_expr(centers_f, centers_s)
-lib_C_f = lib_C_f.reshape(-1, N * M)
+lib_C_f = lib_C_f.reshape(-1, N * M)[..., nan_mask]
 
 lib_A_s = np.empty((num_A_s, N, M))
 for k in range(num_A_s):
     lamb_expr = sympy.lambdify([f_sym, s_sym], A_s_expr[k])
     lib_A_s[k] = lamb_expr(centers_f, centers_s)
-lib_A_s = lib_A_s.reshape(-1, N * M)
-# All libraries are (num_lib, N*M)
+lib_A_s = lib_A_s.reshape(-1, N * M)[..., nan_mask]
+# All libraries are (num_lib, Q)
 
 # Initialize Xi with least squares regression (no finite-time corrections)
-A_f_km = A_f_km.flatten()
-C_f_km = C_f_km.flatten()
-A_s_km = A_s_km.flatten()
 Xi0 = np.empty((num_A_f + num_C_f + num_A_s,))
-mask = np.nonzero(A_f_km)[0]
-Xi0[:num_A_f] = lstsq(lib_A_f[:, mask].T, A_f_km[mask])[0]
-mask = np.nonzero(C_f_km)[0]  # This mask may actually be the same as previous
-Xi0[num_A_f : num_A_f + num_C_f] = lstsq(lib_C_f[:, mask].T, C_f_km[mask])[0]
-mask = np.nonzero(A_s_km)[0]  # This mask may actually be the same as previous
-Xi0[num_A_f + num_C_f :] = lstsq(lib_A_s[:, mask].T, A_s_km[mask])[0]
+Xi0 = np.random.random(num_A_f + num_C_f + num_A_s)
+# mask = np.nonzero(A_f_km)[0]
+# Xi0[:num_A_f] = lstsq(lib_A_f[:, mask].T, A_f_km[mask])[0]
+# mask = np.nonzero(C_f_km)[0]  # This mask may actually be the same as previous
+# Xi0[num_A_f : num_A_f + num_C_f] = lstsq(lib_C_f[:, mask].T, C_f_km[mask])[0]
+# mask = np.nonzero(A_s_km)[0]  # This mask may actually be the same as previous
+# Xi0[num_A_f + num_C_f :] = lstsq(lib_A_s[:, mask].T, A_s_km[mask])[0]
 print("Xi0 =", Xi0)
 # NOTE: are these initial conditions good enough for highly non-linear systems?
 
@@ -338,19 +343,19 @@ def SSR_loop(opt_fun, params):
 
 
 # Optimization parameters
-weight = np.ones_like(pdf).flatten()  # 1 / pdf
+weight = np.ones_like(pdf.flatten()[nan_mask])  # 1 / pdf
 weight /= np.nansum(weight)
 W = np.array([weight, weight, weight])  # Weights from pdf values
 params = {
     "W": W,
-    "A_x_KM": A_f_km,
-    "C_x_KM": C_f_km,
-    "A_y_KM": A_s_km,
+    "A_x_KM": A_f_km_masked,  # (101*101,) -> (Q,)
+    "C_x_KM": C_f_km_masked,
+    "A_y_KM": A_s_km_masked,
     "Xi0": Xi0,
     "A_x_expr": A_f_expr,
     "A_y_expr": A_s_expr,
     "C_x_expr": C_f_expr,
-    "lib_A_x": lib_A_f,
+    "lib_A_x": lib_A_f,  # (..., 101*101) -> (..., Q)
     "lib_A_y": lib_A_s,
     "lib_C_x": lib_C_f,
 }
@@ -412,6 +417,54 @@ fig_SSR.tight_layout()
 fig_SSR.savefig(folder_path / "SSR_sparsity_log_f_s.png")
 plt.close(fig_SSR)
 
+n_terms = len(labels)
+
+fig_SSR_reduced, (ax_full_cost, ax_cost, ax_history) = plt.subplots(
+    nrows=3, figsize=(12, 20)
+)
+ax_full_cost: plt.Axes  # type: ignore
+ax_cost: plt.Axes  # type: ignore
+ax_history: plt.Axes  # type: ignore
+# ignore the first point as it is usually very large
+skip = 10
+for x, y in zip(np.arange(len(V))[skip:], cost_values[skip:]):
+    for z in y:
+        ax_full_cost.scatter(x, np.log(z), c="k", alpha=0.2)
+ax_full_cost.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k")
+ax_full_cost.set_xticks(np.arange(skip, n_terms - 2))
+ax_full_cost.set_xticklabels(np.arange(n_terms, 2, -1))
+ax_full_cost.set_xlim(-0.5, n_terms - 2.5)
+ax_full_cost.set_xlabel("Sparsity")
+ax_full_cost.set_ylabel(r"Cost, $\log V$")
+
+ax_cost.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k")
+ax_cost.set_xticks(np.arange(skip, n_terms - 2))
+ax_cost.set_xticklabels(np.arange(n_terms - skip, 2, -1))
+ax_cost.set_xlim(-0.5, n_terms - 2.5)
+ax_cost.set_xlabel("Sparsity")
+ax_cost.set_ylabel(r"Cost, $\log V$")
+
+square = np.zeros_like(Xi)
+for i, hist in enumerate(active_history):
+    square[hist, i] = 1
+square = square.astype(bool)
+
+# histories
+ax_history.pcolor(square, cmap="bone_r", edgecolors="gray")
+# drift / diffusion delimiters
+ax_history.axhline(y=num_A_f, color="red")
+ax_history.axhline(y=num_A_f + num_A_s, color="red")
+ax_history.set_yticks(0.5 + np.arange(skip, n_terms))
+ax_history.set_yticklabels(labels)
+ax_history.set_xticks(0.5 + np.arange(skip, n_terms - 2))
+ax_history.set_xticklabels(np.arange(n_terms - skip, 2, -1))
+ax_history.set_xlabel("Sparsity")
+ax_history.set_ylabel("Active terms")
+
+fig_SSR_reduced.tight_layout()
+fig_SSR_reduced.savefig(folder_path / "SSR_sparsity_log_f_s.png")
+plt.close(fig_SSR_reduced)
+
 # Select model with the fewest terms before the cost function spikes
 dlogV = np.log(V[1:]) - np.log(V[:-1])
 model_selected = np.argmax(dlogV)  # take the first accepted spike
@@ -469,7 +522,7 @@ axes_km_vals[1][0].set_zlabel(r"$C_{f}(f, \sigma) = B_{f}^2 / 2$")
 
 # axes_km_vals[1][1].plot_wireframe(centers_f, centers_s, C_s_km, label="KM")
 axes_km_vals[1][1].plot_wireframe(
-    f_mesh, s_mesh, np.zeros_like(centers_f)
+    f_mesh, s_mesh, np.zeros_like(f_mesh)
 )  # , label="SINDy")
 axes_km_vals[1][1].set_zlabel(r"$C_{\sigma}(f, \sigma) = B_{\sigma}^2 / 2$")
 
