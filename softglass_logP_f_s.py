@@ -69,13 +69,13 @@ M = len(centers_s)
 
 if args.plot_intermediate:
     fig_pdf, axes_pdf = plt.subplots(
-        ncols=2, subplot_kw={"projection": "3d"}, figsize=(13, 6)
+        ncols=2, subplot_kw={"projection": "3d"}, figsize=(11, 6)
     )
     axes_pdf: list[Axes3D]
-    axes_pdf[0].plot_wireframe(f_mesh, s_mesh, pdf)
+    axes_pdf[0].plot_wireframe(np.log(f_mesh), s_mesh, pdf)
     axes_pdf[0].set_zlabel(r"PDF($f, \sigma$)")
     axes_pdf[0].set_ylabel(r"Stress, $\sigma$)")
-    axes_pdf[0].set_xlabel(r"Fluidity, $f$")
+    axes_pdf[0].set_xlabel(r"$\log$ Fluidity, $\log f$")
 
     axes_pdf[1].plot_wireframe(np.log(f_mesh), s_mesh, np.log(pdf))
     axes_pdf[1].set_zlabel(r"$\log$ PDF($f, \sigma$)")
@@ -87,28 +87,28 @@ if args.plot_intermediate:
     plt.close(fig_pdf)
 
     fig_moments, axes_moments = plt.subplots(
-        nrows=2, ncols=2, subplot_kw={"projection": "3d"}, figsize=(13, 6)
+        nrows=2, ncols=2, subplot_kw={"projection": "3d"}, figsize=(11, 11)
     )
     axes_moments: list[list[Axes3D]]
-    axes_moments[0][0].plot_wireframe(f_mesh, s_mesh, A_f_km)
+    axes_moments[0][0].plot_wireframe(np.log(f_mesh), s_mesh, A_f_km)
     axes_moments[0][0].set_zlabel(r"$m^{(1, 0)}(f, \sigma)$")
     axes_moments[0][0].set_ylabel(r"Stress, $\sigma$)")
-    axes_moments[0][0].set_xlabel(r"Fluidity, $f$")
+    axes_moments[0][0].set_xlabel(r"$\log$ Fluidity, $\log f$")
 
-    axes_moments[0][1].plot_wireframe(f_mesh, s_mesh, C_f_km)
+    axes_moments[0][1].plot_wireframe(np.log(f_mesh), s_mesh, C_f_km)
     axes_moments[0][1].set_zlabel(r"$m^{(2, 0)}(f, \sigma)$")
     axes_moments[0][1].set_ylabel(r"Stress, $\sigma$)")
-    axes_moments[0][1].set_xlabel(r"Fluidity, $f$")
+    axes_moments[0][1].set_xlabel(r"$\log$ Fluidity, $\log f$")
 
-    axes_moments[1][0].plot_wireframe(f_mesh, s_mesh, A_s_km)
+    axes_moments[1][0].plot_wireframe(np.log(f_mesh), s_mesh, A_s_km)
     axes_moments[1][0].set_zlabel(r"$m^{(0, 1)}(f, \sigma)$")
     axes_moments[1][0].set_ylabel(r"Stress, $\sigma$)")
-    axes_moments[1][0].set_xlabel(r"Fluidity, $f$")
+    axes_moments[1][0].set_xlabel(r"$\log$ Fluidity, $f$")
 
-    axes_moments[1][1].plot_wireframe(f_mesh, s_mesh, C_s_km)
+    axes_moments[1][1].plot_wireframe(np.log(f_mesh), s_mesh, C_s_km)
     axes_moments[1][1].set_zlabel(r"$m^{(0, 2)}(f, \sigma)$")
     axes_moments[1][1].set_ylabel(r"Stress, $\sigma$)")
-    axes_moments[1][1].set_xlabel(r"Fluidity, $f$")
+    axes_moments[1][1].set_xlabel(r"$\log$ Fluidity, $\log f$")
 
     fig_moments.tight_layout()
     fig_moments.savefig(folder_path / "moments_log_f_s.png")
@@ -135,6 +135,8 @@ num_C_f = len(C_f_expr)
 A_s_expr = np.array([f_sym**i * s_sym**j for j in range(3) for i in range(3)])
 print("A_s library:", A_s_expr)
 num_A_s = len(A_s_expr)
+
+print(f"Regressing on library of N={num_A_f+num_C_f+num_A_s} terms")
 
 # C_s library: should be 0, so skip since we would only learn the higher order finite time terms
 
@@ -367,17 +369,25 @@ labels = [
 
 n_terms = len(labels)
 
-fig_SSR, (ax_cost, ax_history) = plt.subplots(nrows=2, figsize=(6, 8))
+fig_SSR, (ax_full_cost, ax_cost, ax_history) = plt.subplots(nrows=3, figsize=(12, 20))
+ax_full_cost: plt.Axes  # type: ignore
 ax_cost: plt.Axes  # type: ignore
 ax_history: plt.Axes  # type: ignore
 # ignore the first point as it is usually very large
-ax_cost.scatter(np.arange(len(V))[1:], np.log(V)[1:], c="k")
 for x, y in zip(np.arange(len(V))[1:], cost_values[1:]):
     for z in y:
-        ax_cost.scatter(x, z, c="k", alpha=0.2)
-ax_cost.set_xticks(np.arange(n_terms - 1))
-ax_cost.set_xticklabels(np.arange(n_terms, 1, -1))
-ax_cost.set_xlim(-0.5, n_terms - 1.5)
+        ax_full_cost.scatter(x, np.log(z), c="k", alpha=0.2)
+ax_full_cost.scatter(np.arange(len(V))[1:], np.log(V)[1:], c="k")
+ax_full_cost.set_xticks(np.arange(n_terms - 2))
+ax_full_cost.set_xticklabels(np.arange(n_terms, 2, -1))
+ax_full_cost.set_xlim(-0.5, n_terms - 2.5)
+ax_full_cost.set_xlabel("Sparsity")
+ax_full_cost.set_ylabel(r"Cost, $\log V$")
+
+ax_cost.scatter(np.arange(len(V))[1:], np.log(V)[1:], c="k")
+ax_cost.set_xticks(np.arange(n_terms - 2))
+ax_cost.set_xticklabels(np.arange(n_terms, 2, -1))
+ax_cost.set_xlim(-0.5, n_terms - 2.5)
 ax_cost.set_xlabel("Sparsity")
 ax_cost.set_ylabel(r"Cost, $\log V$")
 
@@ -393,8 +403,8 @@ ax_history.axhline(y=num_A_f, color="red")
 ax_history.axhline(y=num_A_f + num_A_s, color="red")
 ax_history.set_yticks(0.5 + np.arange(n_terms))
 ax_history.set_yticklabels(labels)
-ax_history.set_xticks(0.5 + np.arange(n_terms - 1))
-ax_history.set_xticklabels(np.arange(n_terms, 1, -1))
+ax_history.set_xticks(0.5 + np.arange(n_terms - 2))
+ax_history.set_xticklabels(np.arange(n_terms, 2, -1))
 ax_history.set_xlabel("Sparsity")
 ax_history.set_ylabel("Active terms")
 
@@ -445,25 +455,27 @@ fig_km_vals, axes_km_vals = plt.subplots(
     nrows=2, ncols=2, figsize=(12, 12), subplot_kw={"projection": "3d"}
 )
 axes_km_vals: list[list[Axes3D]]
-axes_km_vals[0][0].plot_wireframe(centers_f, centers_s, A_f_km, c="b", label="KM")
-axes_km_vals[0][0].plot_wireframe(centers_f, centers_s, A_f_vals, c="r", label="SINDy")
+# axes_km_vals[0][0].plot_wireframe(centers_f, centers_s, A_f_km, label="KM")
+axes_km_vals[0][0].plot_wireframe(centers_f, centers_s, A_f_vals)  # , label="SINDy")
 axes_km_vals[0][0].set_zlabel(r"$A_{f}(f, \sigma)$")
 
-axes_km_vals[0][1].plot_wireframe(centers_f, centers_s, A_s_km, c="b", label="KM")
-axes_km_vals[0][1].plot_wireframe(centers_f, centers_s, A_s_vals, c="r", label="SINDy")
+# axes_km_vals[0][1].plot_wireframe(centers_f, centers_s, A_s_km, label="KM")
+axes_km_vals[0][1].plot_wireframe(centers_f, centers_s, A_s_vals)  # , label="SINDy")
 axes_km_vals[0][1].set_zlabel(r"$A_{\sigma}(f, \sigma)$")
 
-axes_km_vals[1][0].plot_wireframe(centers_f, centers_s, C_f_km, c="b", label="KM")
-axes_km_vals[1][0].plot_wireframe(centers_f, centers_s, C_f_vals, c="r", label="SINDy")
+# axes_km_vals[1][0].plot_wireframe(centers_f, centers_s, C_f_km, label="KM")
+axes_km_vals[1][0].plot_wireframe(centers_f, centers_s, C_f_vals)  # , label="SINDy")
 axes_km_vals[1][0].set_zlabel(r"$C_{f}(f, \sigma) = B_{f}^2 / 2$")
 
-axes_km_vals[1][1].plot_wireframe(centers_f, centers_s, C_s_km, c="b", label="KM")
-# axes_km_vals[1][1].plot_wireframe(centers_f, centers_s, C_s_vals, c="r", label="SINDy")
+# axes_km_vals[1][1].plot_wireframe(centers_f, centers_s, C_s_km, label="KM")
+axes_km_vals[1][1].plot_wireframe(
+    centers_f, centers_s, np.zeros_like(centers_f)
+)  # , label="SINDy")
 axes_km_vals[1][1].set_zlabel(r"$C_{\sigma}(f, \sigma) = B_{\sigma}^2 / 2$")
 
 for a in axes_km_vals:
     for b in a:
-        b.legend()
+        # b.legend()
         b.set_xlabel(r"$f$")
         b.set_ylabel(r"$\sigma$")
 
