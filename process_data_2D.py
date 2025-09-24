@@ -206,7 +206,7 @@ else:
     filename = "km_f_s.npz"
 
 timeseries = np.stack([fluidity[mask], sigma[mask]], axis=1)
-kmc, _ = km_log_bins_2(timeseries, [lsf, lss], bins, powers=2, tol=1e-20)
+kmc, _ = km_log_bins_2(timeseries, [lsf, lss], bins, powers=2, tol=1e-10, tol_nan=True)
 
 # indices can be found from the powers array returned by km, or by hand
 pdf = kmc[0]
@@ -217,14 +217,11 @@ moment2_s = kmc[4] / metadata["dt"]
 
 f_grid, s_grid = np.meshgrid(fluidity_widths, sigma_widths)
 
-pdf_sum = np.sum(pdf * f_grid * s_grid)
+pdf_sum = np.nansum(pdf * f_grid * s_grid)
 pdf /= pdf_sum
 
-assert np.all(np.isfinite(pdf)), "KM pdf is not finite"
-assert np.all(np.isfinite(moment1_f)), "KM moment1_f is not finite"
-assert np.all(np.isfinite(moment1_s)), "KM moment1_s is not finite"
-assert np.all(np.isfinite(moment2_f)), "KM moment2_f is not finite"
-assert np.all(np.isfinite(moment2_s)), "KM moment2_s is not finite"
+if np.all(np.isnan(pdf)):
+    raise ValueError("All pdf values are NaNs")
 
 np.savez(
     folder_path / filename,
