@@ -130,6 +130,8 @@ def get_bins_log(log_data, N=100):
 
 if lsf and lss:
     log_fluidity = np.log(fluidity)
+    log_sigma = np.log(sigma)
+    mask = np.isfinite(log_fluidity) * np.isfinite(log_sigma)
     (
         fluidity_edges_log,
         fluidity_centers_log,
@@ -137,8 +139,7 @@ if lsf and lss:
         fluidity_edges,
         fluidity_centers,
         fluidity_widths,
-    ) = get_bins_log(log_fluidity, num_bins_fluidity)
-    log_sigma = np.log(sigma)
+    ) = get_bins_log(log_fluidity[mask], num_bins_fluidity)
     (
         sigma_edges_log,
         sigma_centers_log,
@@ -146,11 +147,12 @@ if lsf and lss:
         sigma_edges,
         sigma_centers,
         sigma_widths,
-    ) = get_bins_log(log_sigma, num_bins_sigma)
+    ) = get_bins_log(log_sigma[mask], num_bins_sigma)
     bins = [fluidity_edges_log, sigma_edges_log]
     filename = "km_log_f_log_s.npz"
 elif lsf and not lss:
     log_fluidity = np.log(fluidity)
+    mask = np.isfinite(log_fluidity) * np.isfinite(sigma)
     (
         fluidity_edges_log,
         fluidity_centers_log,
@@ -158,21 +160,22 @@ elif lsf and not lss:
         fluidity_edges,
         fluidity_centers,
         fluidity_widths,
-    ) = get_bins_log(log_fluidity, num_bins_fluidity)
+    ) = get_bins_log(log_fluidity[mask], num_bins_fluidity)
     (
         sigma_edges,
         sigma_centers,
         sigma_widths,
-    ) = get_bins_linear(sigma, num_bins_sigma)
+    ) = get_bins_linear(sigma[mask], num_bins_sigma)
     bins = [fluidity_edges_log, sigma_edges]
     filename = "km_log_f_s.npz"
 elif not lsf and lss:
+    log_sigma = np.log(sigma)
+    mask = np.isfinite(fluidity) * np.isfinite(log_sigma)
     (
         fluidity_edges,
         fluidity_centers,
         fluidity_widths,
-    ) = get_bins_linear(fluidity, num_bins_fluidity)
-    log_sigma = np.log(sigma)
+    ) = get_bins_linear(fluidity[mask], num_bins_fluidity)
     (
         sigma_edges_log,
         sigma_centers_log,
@@ -180,16 +183,16 @@ elif not lsf and lss:
         sigma_edges,
         sigma_centers,
         sigma_widths,
-    ) = get_bins_log(log_sigma, num_bins_sigma)
+    ) = get_bins_log(log_sigma[mask], num_bins_sigma)
     bins = [fluidity_edges, sigma_edges_log]
     filename = "km_f_log_s.npz"
 else:
+    mask = np.isfinite(fluidity) * np.isfinite(sigma)
     (
         fluidity_edges,
         fluidity_centers,
         fluidity_widths,
     ) = get_bins_linear(fluidity, num_bins_fluidity)
-    log_sigma = np.log(sigma)
     (
         sigma_edges,
         sigma_centers,
@@ -198,9 +201,9 @@ else:
     bins = [fluidity_edges, sigma_edges]
     filename = "km_f_s.npz"
 
-timeseries = np.concatenate([fluidity, sigma], axis=1)
+timeseries = np.stack([fluidity[mask], sigma[mask]], axis=1)
 print(np.shape(timeseries))
-kmc, _ = km_log_bins_2(timeseries, [lsf, lss], bins, powers=2)
+kmc, _ = km_log_bins_2(timeseries, [lsf, lss], bins, powers=2, tol=1e-20)
 
 # indices can be found from the powers array returned by km, or by hand
 pdf = kmc[0]
@@ -211,7 +214,21 @@ moment2_s = kmc[4] / metadata["dt"]
 
 f_grid, s_grid = np.meshgrid(fluidity_widths, sigma_widths)
 
-pdf /= np.sum(pdf * f_grid * s_grid)
+print(f"{pdf=}")
+print(f"{moment1_f=}")
+print(f"{moment1_s=}")
+print(f"{moment2_f=}")
+print(f"{moment2_s=}")
+
+pdf_sum = np.sum(pdf * f_grid * s_grid)
+print(f"{pdf_sum=}")  # 0?
+pdf /= pdf_sum
+
+assert np.all(np.isfinite(pdf)), "KM pdf is not finite"
+assert np.all(np.isfinite(moment1_f)), "KM moment1_f is not finite"
+assert np.all(np.isfinite(moment1_s)), "KM moment1_s is not finite"
+assert np.all(np.isfinite(moment2_f)), "KM moment2_f is not finite"
+assert np.all(np.isfinite(moment2_s)), "KM moment2_s is not finite"
 
 np.savez(
     folder_path / filename,
