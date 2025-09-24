@@ -465,7 +465,7 @@ def _km_log_bins_2(
 
     for i, to_log in enumerate(which_log):
         if to_log:
-            timeseries[i] = np.log(timeseries[i])
+            timeseries[..., i] = np.log(timeseries[..., i])
 
     # Get weighted histogram
     hist, edges = histogramdd(timeseries[:-1, ...], bins=bins, weights=weights, bw=bw)
