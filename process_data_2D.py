@@ -38,13 +38,9 @@ print(folder_path)
 metadata, times, phi, sigma = dl.get_data(
     folder_path, start=start, stop=stop, step=step
 )
-print(np.shape(times))
-print(np.shape(phi))
-print(np.shape(sigma))
 
 fluidity = phi**2
 mask = (fluidity > np.exp(cutoff)).flatten()
-print(np.shape(mask))
 times = times[mask]
 fluidity = fluidity[mask]
 sigma = sigma[mask]
@@ -57,24 +53,28 @@ if plot_intermediate:
         ax_f_s.set_ylabel(r"log Fluidity, $\log f$")
         fig_f_s.tight_layout()
         fig_f_s.savefig(folder_path / "phasespace_log_f_log_s.png")
+        print(f"Saved fig: {folder_path}/phasespace_log_f_log_s.png")
     elif lsf and not lss:
         ax_f_s.plot(sigma, np.log(fluidity))
         ax_f_s.set_xlabel(r"Stress, $\sigma$")
         ax_f_s.set_ylabel(r"log Fluidity, $\log f$")
         fig_f_s.tight_layout()
         fig_f_s.savefig(folder_path / "phasespace_log_f_s.png")
+        print(f"Saved fig: {folder_path}/phasespace_log_f_s.png")
     elif not lsf and lss:
         ax_f_s.plot(np.log(sigma), fluidity)
         ax_f_s.set_xlabel(r"log Stress, $\log \sigma$")
         ax_f_s.set_ylabel(r"Fluidity, $f$")
         fig_f_s.tight_layout()
         fig_f_s.savefig(folder_path / "phasespace_f_log_s.png")
+        print(f"Saved fig: {folder_path}/phasespace_f_log_s.png")
     else:
         ax_f_s.plot(sigma, fluidity)
         ax_f_s.set_xlabel(r"Stress, $\sigma$")
         ax_f_s.set_ylabel(r"Fluidity, $f$")
         fig_f_s.tight_layout()
         fig_f_s.savefig(folder_path / "phasespace_f_s.png")
+        print(f"Saved fig: {folder_path}/phasespace_f_s.png")
 
     fig_t_fs, (ax_t_f, ax_t_s) = plt.subplots(2, sharex=True)
     ax_t_f: plt.Axes  # type: ignore
@@ -99,12 +99,16 @@ if plot_intermediate:
     fig_t_fs.tight_layout()
     if lsf and lss:
         fig_t_fs.savefig(folder_path / "dataset_log_f_log_s.png")
+        print(f"Saved fig: {folder_path}/dataset_log_f_log_s.png")
     elif lsf and not lss:
         fig_t_fs.savefig(folder_path / "dataset_log_f_s.png")
+        print(f"Saved fig: {folder_path}/dataset_log_f_s.png")
     elif not lsf and lss:
         fig_t_fs.savefig(folder_path / "dataset_f_log_s.png")
+        print(f"Saved fig: {folder_path}/dataset_f_log_s.png")
     else:
         fig_t_fs.savefig(folder_path / "dataset_f_s.png")
+        print(f"Saved fig: {folder_path}/dataset_f_s.png")
 
 
 def get_bins_linear(data, N=100):
@@ -202,7 +206,6 @@ else:
     filename = "km_f_s.npz"
 
 timeseries = np.stack([fluidity[mask], sigma[mask]], axis=1)
-print(np.shape(timeseries))
 kmc, _ = km_log_bins_2(timeseries, [lsf, lss], bins, powers=2, tol=1e-20)
 
 # indices can be found from the powers array returned by km, or by hand
@@ -214,14 +217,7 @@ moment2_s = kmc[4] / metadata["dt"]
 
 f_grid, s_grid = np.meshgrid(fluidity_widths, sigma_widths)
 
-print(f"{pdf=}")
-print(f"{moment1_f=}")
-print(f"{moment1_s=}")
-print(f"{moment2_f=}")
-print(f"{moment2_s=}")
-
 pdf_sum = np.sum(pdf * f_grid * s_grid)
-print(f"{pdf_sum=}")  # 0?
 pdf /= pdf_sum
 
 assert np.all(np.isfinite(pdf)), "KM pdf is not finite"
