@@ -21,7 +21,7 @@ import data_loader as dl
 
 ap = argparse.ArgumentParser()
 ap.add_argument("folder")
-ap.add_argument("--kl-reg", type=float, default=1)
+ap.add_argument("--skip", type=int, default=0)
 ap.add_argument("--step", type=int, default=1)
 ap.add_argument("--plot-intermediate", action="store_true")
 args = ap.parse_args()
@@ -29,6 +29,8 @@ print(args)
 
 folder_path = dl.SCRATCH_PATH / args.folder
 print(folder_path)
+
+skip = args.skip
 
 with open(folder_path / "metadata.json") as f:
     metadata = json.load(f)
@@ -270,7 +272,6 @@ fig, (ax_all_costs, ax, ax2) = plt.subplots(nrows=3, figsize=(6, 12))
 ax_all_costs: Axes
 ax: Axes
 ax2: Axes
-skip = 0
 for x, y in zip(np.arange(len(V))[skip:], cost_values[skip:]):
     for z in y:
         ax_all_costs.scatter(x, np.log(z), c="k", alpha=0.2)

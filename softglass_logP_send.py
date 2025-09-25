@@ -23,8 +23,8 @@ for foldername in [
             f"/scratch/seismology/zach/{folder}/softglass_logP.err",
             "/eejit/home/zach/LearningSoftglassEqns/Langevin_regression_method/langevin-regression/softglass_logP.slurm",
             folder,
-            "--kl-reg",
-            "0",
+            "--skip",
+            "2",
             "--plot-intermediate",
         ]
     )
