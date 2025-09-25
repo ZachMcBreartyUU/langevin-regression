@@ -238,9 +238,9 @@ def cost(Xi, params):
     C_x_vals = lib_C_x.T @ Xi[n_A_x + n_A_y :]  # (N*M,)
 
     V = (
-        np.sum(W[0] * np.abs(A_x_vals - A_x_KM) ** 2)
-        + np.sum(W[1] * np.abs(A_y_vals - A_y_KM) ** 2)
-        + np.sum(W[2] * np.abs(C_x_vals - C_x_KM) ** 2)
+        np.nansum(W[0] * np.abs((A_x_vals - A_x_KM) / A_x_KM) ** 2)
+        + np.nansum(W[1] * np.abs((A_y_vals - A_y_KM) / A_y_KM) ** 2)
+        + np.nansum(W[2] * np.abs((C_x_vals - C_x_KM) / C_x_KM) ** 2)
     )
 
     return V
@@ -438,8 +438,8 @@ ax_full_cost.set_xlabel("Sparsity")
 ax_full_cost.set_ylabel(r"Cost, $\log V$")
 
 ax_cost.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k")
-ax_cost.set_xticks(np.arange(skip, n_terms - 2))
-ax_cost.set_xticklabels(np.arange(n_terms - skip, 2, -1))
+ax_cost.set_xticks(np.arange(n_terms - 2))
+ax_cost.set_xticklabels(np.arange(n_terms, 2, -1))
 ax_cost.set_xlim(-0.5, n_terms - 2.5)
 ax_cost.set_xlabel("Sparsity")
 ax_cost.set_ylabel(r"Cost, $\log V$")
@@ -454,10 +454,10 @@ ax_history.pcolor(square, cmap="bone_r", edgecolors="gray")
 # drift / diffusion delimiters
 ax_history.axhline(y=num_A_f, color="red")
 ax_history.axhline(y=num_A_f + num_A_s, color="red")
-ax_history.set_yticks(0.5 + np.arange(skip, n_terms))
+ax_history.set_yticks(0.5 + np.arange(n_terms))
 ax_history.set_yticklabels(labels)
-ax_history.set_xticks(0.5 + np.arange(skip, n_terms - 2))
-ax_history.set_xticklabels(np.arange(n_terms - skip, 2, -1))
+ax_history.set_xticks(0.5 + np.arange(n_terms - 2))
+ax_history.set_xticklabels(np.arange(n_terms, 2, -1))
 ax_history.set_xlabel("Sparsity")
 ax_history.set_ylabel("Active terms")
 
