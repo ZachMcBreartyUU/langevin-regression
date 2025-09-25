@@ -7,14 +7,16 @@ The size of the libraries matters _greatly_ as they are constantly inverted, thi
 
 import argparse
 import json
+from time import time
 
 import numpy as np
 from numpy.linalg import lstsq
 import matplotlib.pyplot as plt
+from mpl_toolkits.axisartist import Axes
 import sympy
+from scipy.optimize import minimize
 
-import utils
-import fpsolve
+from utils import sindy_model
 import data_loader as dl
 
 ap = argparse.ArgumentParser()
@@ -82,15 +84,15 @@ if args.plot_intermediate:
 ### Build SINDy libraries with sympy
 f_sym = sympy.symbols("f")
 
-# A library:      [  1, f^1/2,     f^2/2, f^3/2, f^4/2, f^5/2]
-# expected coeff: [ep0,     0, -2R + ep1,     0,    2m,    -2]
-A_f_expr = np.array([f_sym ** (i / 2) for i in range(6)])
+# A library:      [  1, f^1/2,     f^2/2, f^3/2, f^4/2, f^5/2, f^6/2, f^7/2]
+# expected coeff: [ep0,     0, -2R + ep1,     0,    2m,    -2,     0,     0]
+A_f_expr = np.array([f_sym ** (i / 2) for i in range(8)])
 print("A_f library:", A_f_expr)
 num_A_f = len(A_f_expr)
 
 # a library:      [1,   f, f^2, f^3, f^4]
 # expected coeff: [0, ep0, ep1,   0,   0]
-C_f_expr = np.array([f_sym ** (i) for i in range(0, 5)])
+C_f_expr = np.array([f_sym ** (i) for i in range(5)])
 print("a_f library:", C_f_expr)
 num_C_f = len(C_f_expr)
 
@@ -108,55 +110,178 @@ for k in range(num_C_f):
 # Initialize Xi with least squares regression (no finite-time corrections)
 Xi0 = np.empty((num_A_f + num_C_f))
 mask = np.nonzero(np.isfinite(A_km))[0]  # Z: why only mask on f_KM?
-Xi0[:num_A_f] = lstsq(lib_A_f[:, mask].T, A_km[mask], rcond=None)[0]
-Xi0[num_A_f:] = lstsq(lib_C_f[:, mask].T, C_km[mask], rcond=None)[0]
+Xi0[:num_A_f] = lstsq(lib_A_f[:, mask].T, A_km[mask])[0]
+Xi0[num_A_f:] = lstsq(lib_C_f[:, mask].T, C_km[mask])[0]
 print("Xi0 =", Xi0)
 
-# Initialize adjoint solver
-afp = fpsolve.AdjFP(centers)
-
-# Initialize forward steady-state solver
-dx = widths
-fp = fpsolve.SteadyFP(N, dx)
-
 # Optimization parameters
-weight = np.ones_like(pdf)  # 1 / pdf
+weight = np.ones_like(pdf)
 weight /= np.nansum(weight)
-W = np.array([weight, weight])  # Weights from pdf values
+W = np.array([weight, weight])
 params = {
     "W": W,
     "f_KM": A_km,
     "a_KM": C_km,
     "Xi0": Xi0,
-    "f_expr": A_f_expr,  # dictionary keys are legacy
-    "a_expr": C_f_expr,  # dictionary keys are legacy
-    "lib_f": lib_A_f.T,  # dictionary keys are legacy
-    "lib_a": lib_C_f.T,  # dictionary keys are legacy
-    "N": N,
-    "kl_reg": args.kl_reg,
-    "fp": fp,
-    "afp": afp,
-    "p_hist": pdf,
-    "tau": dt,
-    "radial": False,
+    "f_expr": A_f_expr,
+    "a_expr": C_f_expr,
+    "lib_f": lib_A_f,
+    "lib_a": lib_C_f,
 }
 
+
+def cost(Xi, params):
+    """
+    Least-squares cost function for optimization
+    This version is only good in 1D, but could be extended pretty easily
+    Xi - current coefficient estimates
+    param - inputs to optimization problem: grid points, list of candidate expressions, regularizations
+        W, f_KM, a_KM, x_pts, y_pts, x_msh, y_msh, f_expr, a_expr, l1_reg, l2_reg, kl_reg, p_hist, etc
+    """
+
+    # Unpack parameters
+    W = params["W"]  # Optimization weights
+
+    # Kramers-Moyal coefficients
+    A_KM = params["f_KM"]
+    C_KM = params["a_KM"]
+
+    lib_A = params["lib_f"]
+    lib_C = params["lib_a"]
+
+    # Construct parameterized drift and diffusion functions from libraries and current coefficients
+    A_vals = lib_A.T @ Xi[: lib_A.shape[0]]
+    C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
+
+    # Histogram points without data have NaN values in K-M average - ignore these in the average
+    V = np.nansum(W[0] * np.abs((A_vals - A_KM) / A_KM) ** 2) + np.nansum(
+        W[1] * np.abs((C_vals - C_KM) / C_KM) ** 2
+    )
+
+    return V
+
+
+def AFP_opt(cost, params):
+    ### RUN OPTIMIZATION PROBLEM
+    start_time = time()
+    Xi0 = params["Xi0"]
+
+    opt_fun = lambda Xi: cost(Xi, params)
+
+    res = minimize(
+        opt_fun, Xi0, method="nelder-mead", options={"disp": False, "maxfev": int(1e4)}
+    )
+    print(
+        "%%%% Optimization time: {0} seconds,   Cost: {1} %%%%".format(
+            time() - start_time, res.fun
+        )
+    )
+    # found constants, cost
+    return res.x, res.fun
+
+
+def SSR_loop(opt_fun, params):
+    """
+    Stepwise sparse regression: general function for a given optimization problem
+       opt_fun should take the parameters and return coefficients and cost
+
+    Requires a list of drift and diffusion expressions,
+        (although these are just passed to the opt_fun)
+    """
+
+    # Lists of candidate expressions... coefficients are optimized
+    f_expr = params["f_expr"].copy()
+    a_expr = params["a_expr"].copy()
+    lib_f = params["lib_f"].copy()
+    lib_a = params["lib_a"].copy()
+    Xi0 = params["Xi0"].copy()
+
+    n_terms = len(f_expr) + len(a_expr)
+
+    Xi = np.zeros((n_terms, n_terms - 1), dtype=Xi0.dtype)  # Output results
+    V = np.full((n_terms - 1), np.inf)  # Cost at each step
+
+    # Full regression problem as baseline
+    Xi[:, 0], V[0] = opt_fun(params)
+
+    # Start with all candidates
+    active = np.array([i for i in range(n_terms)])
+    active_history = [active]
+    cost_values = [[V[0]]]
+
+    # Iterate and threshold
+    for k in range(1, n_terms - 1):
+        # Loop through remaining terms and find the one that increases the cost function the least
+        min_idx = -1
+        costs = []
+        for j in range(len(active)):
+            tmp_active = active.copy()
+            tmp_active = np.delete(tmp_active, j)  # Try deleting this term
+
+            # Break off masks for drift/diffusion
+            f_active = tmp_active[tmp_active < len(f_expr)]
+            a_active = tmp_active[tmp_active >= len(f_expr)] - len(f_expr)
+
+            params["f_expr"] = f_expr[f_active]
+            params["a_expr"] = a_expr[a_active]
+            params["lib_f"] = lib_f[f_active]
+            params["lib_a"] = lib_a[a_active]
+            params["Xi0"] = Xi0[tmp_active]
+
+            # Ensure that there is at least one drift and diffusion term left
+            if len(a_active) > 0 and len(f_active) > 0:
+                tmp_Xi, tmp_V = opt_fun(params)
+                costs.append(tmp_V)
+
+                # Keep minimum cost
+                if tmp_V < V[k]:
+                    min_idx = j
+                    V[k] = tmp_V
+                    min_Xi = tmp_Xi
+        cost_values.append(costs)
+
+        print("Cost: {0}".format(V[k]))
+        # Delete least important term
+        active = np.delete(active, min_idx)  # Remove inactive index
+        Xi0[active] = min_Xi  # type: ignore # Re-initialize with best results from previous
+        Xi[active, k] = min_Xi  # type: ignore
+        active_history.append(active)
+        f_active = active[active < len(f_expr)]
+        a_active = active[active >= len(f_expr)] - len(f_expr)
+        print(f"Active f: {f_expr[f_active]}")
+        print(f"Active a: {a_expr[a_active]}", flush=True)
+
+    return Xi, V, active_history, cost_values
+
+
 # Use anonymous function to automatically pass the cost function
-opt_fun = lambda params: utils.AFP_opt(utils.cost, params)
-Xi, V, active_history = utils.SSR_loop(opt_fun, params)
+opt_fun = lambda params: AFP_opt(cost, params)
+Xi, V, active_history, cost_values = SSR_loop(opt_fun, params)
 
 ####################
 # SSR cost function
 ####################
 
-labels = [r"${0}$".format(sympy.latex(t)) for t in np.concatenate((A_f_expr, C_f_expr))]
+labels = [f"${sympy.latex(t)}$" for t in np.concatenate((A_f_expr, C_f_expr))]
 
 n_terms = len(labels)
 
-fig, (ax, ax2) = plt.subplots(nrows=2, figsize=(6, 8))
-ax: plt.Axes  # type: ignore
-ax2: plt.Axes  # type: ignore
-ax.scatter(np.arange(len(V))[1:], np.log(V)[1:], c="k")
+fig, (ax_all_costs, ax, ax2) = plt.subplots(nrows=3, figsize=(6, 12))
+ax_all_costs: Axes
+ax: Axes
+ax2: Axes
+skip = 0
+for x, y in zip(np.arange(len(V))[skip:], cost_values[skip:]):
+    for z in y:
+        ax_all_costs.scatter(x, np.log(z), c="k", alpha=0.2)
+ax_all_costs.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k", marker="x")
+ax_all_costs.set_xticks(np.arange(n_terms - 1))
+ax_all_costs.set_xticklabels(np.arange(n_terms, 1, -1))
+ax_all_costs.set_xlim(-0.5, n_terms - 1.5)
+ax_all_costs.set_xlabel("Sparsity")
+ax_all_costs.set_ylabel(r"Cost, $\log V$")
+
+ax.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k")
 ax.set_xticks(np.arange(n_terms - 1))
 ax.set_xticklabels(np.arange(n_terms, 1, -1))
 ax.set_xlim(-0.5, n_terms - 1.5)
@@ -203,32 +328,12 @@ print(f"Cost = {V[1 - n_terms_selected]:.1e}")
 active = active_history[1 - n_terms_selected]
 f_active = active[active < num_A_f]
 a_active = active[active >= num_A_f] - num_A_f
-
-if args.kl_reg > 0:
-    params_cpy = params.copy()
-    params_cpy["f_expr"] = A_f_expr[f_active]
-    params_cpy["a_expr"] = C_f_expr[a_active]
-    params_cpy["lib_f"] = lib_A_f.T[:, f_active]
-    params_cpy["lib_a"] = lib_C_f.T[:, a_active]
-    params_cpy["Xi0"] = Xi0[active]
-    params_cpy["kl_reg"] = 0
-
-    unreg_Xi, unreg_cost = opt_fun(params_cpy)
-    unreg_Xi_expanded = np.zeros_like(Xi0)
-    unreg_Xi_expanded[active] = unreg_Xi
-    print("Without KL regularisation")
-    print(f"Xi = {unreg_Xi_expanded}")
-    print(f"Cost = {unreg_cost:.1e}", flush=True)
-
-    Xi_f = unreg_Xi_expanded[:num_A_f]
-    Xi_a = unreg_Xi_expanded[num_A_f:]
-else:
-    Xi_f = Xi[:num_A_f, 1 - n_terms_selected]
-    Xi_a = Xi[num_A_f:, 1 - n_terms_selected]
+Xi_f = Xi[:num_A_f, 1 - n_terms_selected]
+Xi_a = Xi[num_A_f:, 1 - n_terms_selected]
 # Functions from the expressions
-A_sym = utils.sindy_model(Xi_f, A_f_expr)
+A_sym = sindy_model(Xi_f, A_f_expr)
 A_sindy = sympy.lambdify(f_sym, A_sym)
-C_sym = utils.sindy_model(Xi_a, C_f_expr)
+C_sym = sindy_model(Xi_a, C_f_expr)
 C_sindy = sympy.lambdify(f_sym, C_sym)
 
 print(f"df = ({A_sym}) dt + ({sympy.sqrt(2*C_sym)}) dbeta")
@@ -242,56 +347,12 @@ if np.ndim(A_vals) == 0:
 if np.ndim(C_vals) == 0:
     C_vals = C_vals + 0 * centers
 
-# Compare PDFs: empirical vs Fokker-Planck solution with model
-# p_fit = fp.solve(A_vals, C_vals)
-# kl_div_val = utils.kl_divergence(pdf, p_fit, dx=dx, tol=1e-6)
-# print(f"KL divergence: {kl_div_val:.1e}")
-
-# fig, ax = plt.subplots(figsize=(10, 10))
-# ax: plt.Axes  # type: ignore
-# ax.plot(centers, pdf, "k", label="Data", lw=3)
-# ax.plot(centers, p_fit, "--", c="r", label="Model", lw=3)
-# ax.legend()
-# ax.set_xlabel(r"$f$")
-# ax.set_ylabel(r"$P(f)$")
-
-# fig.savefig(folder_path / "pdf_comparision_log_f.png")
-
-# afp.precompute_operator(A_vals, C_vals)
-# q = afp.solve(dt)
-# if q is None:
-#     raise RuntimeError("Failed to solve adjoint focker planck system")
-# f_tau, a_tau = q
-
 fig, (ax, ax2) = plt.subplots(ncols=2, figsize=(12, 6))
-ax: plt.Axes  # type: ignore
-ax2: plt.Axes  # type: ignore
-# ax.plot(
-#     centers, A(centers, sigma_min), c="gray", lw=1, alpha=0.5, label="True: min sigma"
-# )
-# ax.plot(
-#     centers, A(centers, sigma_max), c="gray", lw=1, alpha=0.5, label="True: max sigma"
-# )
-# ax.plot(
-#     centers,
-#     A(centers, sigma_avg + sigma_std),
-#     c="gray",
-#     lw=2,
-#     alpha=0.5,
-#     label="True: +1 std",
-# )
-# ax.plot(
-#     centers,
-#     A(centers, sigma_avg - sigma_std),
-#     c="gray",
-#     lw=2,
-#     alpha=0.5,
-#     label="True: -1 std",
-# )
-# ax.plot(centers, A(centers, sigma_avg), c="gray", lw=2, label="True: average")
+ax: Axes
+ax2: Axes
+ax.plot(centers, A(centers, sigma_avg), c="gray", lw=2, label="True: average")
 ax.plot(centers, A_km, ls="", marker=".", markersize=8, c="b", label="KM")
 ax.plot(centers, A_vals, "r", lw=2, label="SINDy")
-# ax.plot(centers, f_tau, "g:", lw=2, label=rf"$\tau = {dt}$")
 ax.legend()
 ax.set_title("Drift")
 ax.set_xlabel(r"$f$")
@@ -300,7 +361,6 @@ ax.set_ylabel(r"$A(f)$")
 ax2.plot(centers, B(centers, sigma_avg) ** 2 / 2, c="gray", lw=2, label="True diff")
 ax2.plot(centers, C_km, ls="", marker=".", markersize=8, c="b", label="KM")
 ax2.plot(centers, C_vals, "r", lw=2, label="SINDy")
-# ax2.plot(centers, a_tau, "g:", lw=2, label=rf"$\tau={dt}$")
 ax2.legend()
 ax2.set_title("Diffusion")
 ax2.set_xlabel(r"$f$")
@@ -308,14 +368,14 @@ ax2.set_ylabel(r"$C(f) = B^2(f) / 2$")
 
 fig.tight_layout()
 fig.savefig(folder_path / "final_graph_f.png")
+print(f"Saved fig: {folder_path / "final_graph_f.png"}")
 
 fig, (ax, ax2) = plt.subplots(ncols=2, figsize=(12, 6))
-ax: plt.Axes  # type: ignore
-ax2: plt.Axes  # type: ignore
+ax: Axes
+ax2: Axes
 ax.plot(centers, A(centers, sigma_avg), c="gray", lw=2, label="True drift")
 ax.plot(centers, A_km, ls="", marker=".", markersize=8, c="b", label="KM")
 ax.plot(centers, A_vals, "r", lw=2, label="SINDy")
-# ax.plot(centers, f_tau, "g:", lw=2, label=rf"$\tau = {dt}$")
 ax.legend()
 ax.set_title("Drift")
 ax.set_xlabel(r"$f$")
@@ -324,7 +384,6 @@ ax.set_ylabel(r"$A(f)$")
 ax2.plot(centers, B(centers, sigma_avg) ** 2 / 2, c="gray", lw=2, label="True diff")
 ax2.plot(centers, C_km, ls="", marker=".", markersize=8, c="b", label="KM")
 ax2.plot(centers, C_vals, "r", lw=2, label="SINDy")
-# ax2.plot(centers, a_tau, "g:", lw=2, label=rf"$\tau={dt}$")
 ax2.legend()
 ax2.set_title("Diffusion")
 ax2.set_xlabel(r"$f$")
@@ -335,3 +394,4 @@ ax2.set_xscale("log")
 
 fig.tight_layout()
 fig.savefig(folder_path / "final_graph_log_f.png")
+print(f"Saved fig: {folder_path / "final_graph_log_f.png"}")
