@@ -13,7 +13,8 @@ import numpy as np
 from numpy.linalg import lstsq
 import matplotlib.pyplot as plt
 from mpl_toolkits.axisartist import Axes
-import sympy
+from jitcsde import jitcsde, y
+import symengine
 from scipy.optimize import minimize
 
 from utils import sindy_model
@@ -21,16 +22,16 @@ import data_loader as dl
 
 ap = argparse.ArgumentParser()
 ap.add_argument("folder")
-ap.add_argument("--skip", type=int, default=0)
 ap.add_argument("--step", type=int, default=1)
 ap.add_argument("--plot-intermediate", action="store_true")
+ap.add_argument("--skip-ssr", type=int, default=0)
 args = ap.parse_args()
 print(args)
 
 folder_path = dl.SCRATCH_PATH / args.folder
 print(folder_path)
 
-skip = args.skip
+skip = args.skip_ssr
 
 with open(folder_path / "metadata.json") as f:
     metadata = json.load(f)
@@ -83,8 +84,8 @@ if args.plot_intermediate:
 
     fig.savefig(folder_path / "pdf_moments_log_f.png")
 
-### Build SINDy libraries with sympy
-f_sym = sympy.symbols("f")
+### Build SINDy libraries with symengine and JITCSDE (sympy)
+f_sym = symengine.Symbol("f")
 
 # A library:      [  1, f^1/2,     f^2/2, f^3/2, f^4/2, f^5/2, f^6/2, f^7/2]
 # expected coeff: [ep0,     0, -2R + ep1,     0,    2m,    -2,     0,     0]
@@ -98,15 +99,15 @@ C_f_expr = np.array([f_sym ** (i) for i in range(5)])
 print("a_f library:", C_f_expr)
 num_C_f = len(C_f_expr)
 
-# Convert sympy expressions into library matrices
+# Convert symengines expressions into library matrices
 lib_A_f = np.empty([num_A_f, N])
 for k in range(num_A_f):
-    lamb_expr = sympy.lambdify(f_sym, A_f_expr[k])
+    lamb_expr = symengine.Lambdify(f_sym, A_f_expr[k])
     lib_A_f[k] = lamb_expr(centers)
 
 lib_C_f = np.empty([num_C_f, N])
 for k in range(num_C_f):
-    lamb_expr = sympy.lambdify(f_sym, C_f_expr[k])
+    lamb_expr = symengine.Lambdify(f_sym, C_f_expr[k])
     lib_C_f[k] = lamb_expr(centers)
 
 # Initialize Xi with least squares regression (no finite-time corrections)
@@ -264,7 +265,7 @@ Xi, V, active_history, cost_values = SSR_loop(opt_fun, params)
 # SSR cost function
 ####################
 
-labels = [f"${sympy.latex(t)}$" for t in np.concatenate((A_f_expr, C_f_expr))]
+labels = [f"${symengine.latex(t)}$" for t in np.concatenate((A_f_expr, C_f_expr))]
 
 n_terms = len(labels)
 
@@ -272,9 +273,9 @@ fig, (ax_all_costs, ax, ax2) = plt.subplots(nrows=3, figsize=(6, 12))
 ax_all_costs: Axes
 ax: Axes
 ax2: Axes
-for x, y in zip(np.arange(len(V))[skip:], cost_values[skip:]):
-    for z in y:
-        ax_all_costs.scatter(x, np.log(z), c="k", alpha=0.2)
+for sparsity, costs in zip(np.arange(len(V))[skip:], cost_values[skip:]):
+    for cost_ in costs:
+        ax_all_costs.scatter(sparsity, np.log(cost_), c="k", alpha=0.2)
 ax_all_costs.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k", marker="x")
 ax_all_costs.set_xticks(np.arange(n_terms - 1))
 ax_all_costs.set_xticklabels(np.arange(n_terms, 1, -1))
@@ -333,11 +334,12 @@ Xi_f = Xi[:num_A_f, 1 - n_terms_selected]
 Xi_a = Xi[num_A_f:, 1 - n_terms_selected]
 # Functions from the expressions
 A_sym = sindy_model(Xi_f, A_f_expr)
-A_sindy = sympy.lambdify(f_sym, A_sym)
+A_sindy = symengine.Lambdify(f_sym, A_sym)
 C_sym = sindy_model(Xi_a, C_f_expr)
-C_sindy = sympy.lambdify(f_sym, C_sym)
+C_sindy = symengine.Lambdify(f_sym, C_sym)
+B_sym = symengine.sqrt(2 * C_sym)
 
-print(f"df = ({A_sym}) dt + ({sympy.sqrt(2*C_sym)}) dbeta")
+print(f"df = ({A_sym}) dt + ({B_sym}) dbeta")
 
 A_vals = A_sindy(centers)
 C_vals = C_sindy(centers)
@@ -396,3 +398,39 @@ ax2.set_xscale("log")
 fig.tight_layout()
 fig.savefig(folder_path / "final_graph_log_f.png")
 print(f"Saved fig: {folder_path / "final_graph_log_f.png"}")
+
+print(f"Integrating found model")
+
+f_sym_symengine = y(0)
+A_sym_jit = A_sym.replace(f_sym, f_sym_symengine)
+B_sym_jit = B_sym.replace(f_sym, f_sym_symengine)
+
+LR_SDE = jitcsde([A_sym_jit], [B_sym_jit], n=1)
+init = [metadata["phi0"]]
+LR_SDE.set_initial_value(init, 0.0)
+LR_SDE.set_seed(metadata["seed"])
+# LR_SDE.set_integration_parameters(first_step=dt)
+
+dt = metadata["dt"]
+num_steps = int(metadata["num_steps"] / 100 / args.step)
+times = np.arange(0, num_steps) * dt
+data = np.fromiter(
+    (LR_SDE.integrate(t) for t in times),
+    dtype=np.dtype((np.float32, 1)),
+    count=num_steps,
+).flatten()
+print(data)
+print(np.all(np.isfinite(data)))
+fig_model, ax_model = plt.subplots()
+ax_model.plot(times, data)
+ax_model.set_ylabel(r"Fluidity, $f$")
+ax_model.set_xlabel(r"Time, $t$")
+fig_model.savefig(folder_path / "model_f.png")
+print(f"Saving fig: {folder_path / "model_f.png"}")
+
+fig_model, ax_model = plt.subplots()
+ax_model.plot(times, np.log(data))
+ax_model.set_ylabel(r"$\log$ Fluidity, $\log f$")
+ax_model.set_xlabel(r"Time, $t$")
+fig_model.savefig(folder_path / "model_log_f.png")
+print(f"Saving fig: {folder_path / "model_log_f.png"}")
