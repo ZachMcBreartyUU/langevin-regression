@@ -9,9 +9,9 @@ for foldername in [
     # "run_0D_0D_5_1_const_35",
     # "run_0D_0D_5_1_const_37",
     "run_0D_0D_5_1_000",
-    "run_0D_0D_5_1_004",
-    "run_0D_0D_6_1_000",
-    "run_0D_0D_6_1_004",
+    # "run_0D_0D_5_1_004",
+    # "run_0D_0D_6_1_000",
+    # "run_0D_0D_6_1_004",
 ]:
     folder = EQN_LEARN_PATH + foldername
     subprocess.run(
@@ -24,11 +24,11 @@ for foldername in [
             "/eejit/home/zach/LearningSoftglassEqns/Langevin_regression_method/langevin-regression/process_data_2D.slurm",
             folder,
             "-Nf",
-            "101",
+            "100",
             "-Ns",
-            "101",
+            "20",
             "-c",
-            "-30",
+            "-10",
             "--log-spacing-fluidity",
             "--plot-intermediate",
         ]

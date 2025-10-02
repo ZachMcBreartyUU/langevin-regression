@@ -6,7 +6,7 @@
 #SBATCH --out="/scratch/seismology/zach/runs_EqnLearning/LangevinRegression-%j.out"
 #SBATCH --error="/scratch/seismology/zach/runs_EqnLearning/LangevinRegression-%j.err"
 #SBATCH --job-name ProcessData
-#####SBATCH --exclusive
+#SBATCH --exclusive
 
 module purge
 

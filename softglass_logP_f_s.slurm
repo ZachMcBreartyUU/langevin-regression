@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --out="/scratch/seismology/zach/runs_EqnLearning/LangevinRegression-%j.out"
 #SBATCH --error="/scratch/seismology/zach/runs_EqnLearning/LangevinRegression-%j.err"
-#SBATCH --job-name LangevinP
+#SBATCH --job-name Langevin_log_f_s
 
 module purge
 

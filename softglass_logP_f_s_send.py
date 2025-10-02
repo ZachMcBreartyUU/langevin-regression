@@ -9,9 +9,9 @@ for foldername in [
     # "run_0D_0D_5_1_const_35",
     # "run_0D_0D_5_1_const_37",
     "run_0D_0D_5_1_000",
-    "run_0D_0D_5_1_004",
-    "run_0D_0D_6_1_000",
-    "run_0D_0D_6_1_004",
+    # "run_0D_0D_5_1_004",
+    # "run_0D_0D_6_1_000",
+    # "run_0D_0D_6_1_004",
 ]:
     folder = EQN_LEARN_PATH + foldername
     subprocess.run(
@@ -23,8 +23,6 @@ for foldername in [
             f"/scratch/seismology/zach/{folder}/softglass_log_f_s.err",
             "/eejit/home/zach/LearningSoftglassEqns/Langevin_regression_method/langevin-regression/softglass_logP_f_s.slurm",
             folder,
-            "--kl-reg",
-            "0",
-            "--plot-intermediate",
+            # "--plot-intermediate",
         ]
     )
