@@ -7,12 +7,16 @@ Jared Callaham (2020)
 import numpy as np
 from time import time
 from scipy.optimize import minimize
+from functools import reduce
 
 
 # Return a single expression from a list of expressions and coefficients
 #   Note this will give a SymPy expression and not a function
 def sindy_model(Xi, expr_list):
-    return sum([Xi[i] * expr_list[i] for i in range(len(expr_list))])
+    return reduce(
+        lambda a, b: a + b,
+        (Xi_i * expr_list_i for Xi_i, expr_list_i in zip(Xi, expr_list)),
+    )
 
 
 def ntrapz(I, dx):
