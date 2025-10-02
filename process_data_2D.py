@@ -12,7 +12,11 @@ ap.add_argument("folder")
 ap.add_argument("--log-spacing-fluidity", action="store_true")
 ap.add_argument("--log-spacing-sigma", action="store_true")
 ap.add_argument(
-    "-c", "--cutoff", type=float, default=-25, help="f > f_cutoff = exp(cutoff)"
+    "-c",
+    "--cutoff",
+    type=float,
+    default=-25,
+    help="f > f_cutoff = exp(cutoff) if log spacing fluidity",
 )
 ap.add_argument("-Nf", "--num-bins-fluidity", type=int, default=101)
 ap.add_argument("-Ns", "--num-bins-sigma", type=int, default=101)
@@ -217,7 +221,7 @@ moment2_s = kmc[4] / metadata["dt"]
 
 f_grid, s_grid = np.meshgrid(fluidity_widths, sigma_widths)
 
-pdf_sum = np.nansum(pdf * f_grid * s_grid)
+pdf_sum = np.nansum(pdf * f_grid.T * s_grid.T)
 pdf /= pdf_sum
 
 if np.all(np.isnan(pdf)):
