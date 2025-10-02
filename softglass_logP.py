@@ -406,7 +406,7 @@ A_sym_jit = A_sym.replace(f_sym, f_sym_symengine)
 B_sym_jit = B_sym.replace(f_sym, f_sym_symengine)
 
 LR_SDE = jitcsde([A_sym_jit], [B_sym_jit], n=1)
-init = [metadata["phi0"]]
+init = [metadata["phi0"] ** 2 + metadata["epsilon_0"]]
 LR_SDE.set_initial_value(init, 0.0)
 LR_SDE.set_seed(metadata["seed"])
 # LR_SDE.set_integration_parameters(first_step=dt)
