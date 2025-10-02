@@ -21,7 +21,6 @@ import data_loader as dl
 
 ap = argparse.ArgumentParser()
 ap.add_argument("folder")
-ap.add_argument("--kl-reg", type=float, default=1)
 ap.add_argument("--step", type=int, default=1)
 ap.add_argument("--plot-intermediate", action="store_true")
 args = ap.parse_args()
@@ -48,21 +47,25 @@ B_s = lambda x, y: 0
 
 with np.load(folder_path / "km_log_f_s.npz") as file:
     file: dict[str, np.ndarray]
-    # Shape info: pdf.npy (101,101) moment1_f.npy (101,101) moment1_s.npy (101,101) moment2_f.npy (101,101) moment2_s.npy (101,101) fluidity_edges.npy (102) fluidity_centers.npy (101) fluidity_widths.npy (101) sigma_edges.npy (102) sigma_centers.npy (101) sigma_widths.npy (101)
-    pdf = file["pdf"]
-    A_f_km = file["moment1_f"]
-    C_f_km = file["moment2_f"]
-    A_s_km = file["moment1_s"]
-    C_s_km = file["moment2_s"]
+    pdf = file["pdf"]  # (M, N)
+    A_f_km = file["moment1_f"]  # (M, N)
+    C_f_km = file["moment2_f"]  # (M, N)
+    A_s_km = file["moment1_s"]  # (M, N)
+    C_s_km = file["moment2_s"]  # (M, N)
 
-    edges_f = file["fluidity_edges"]
-    centers_f = file["fluidity_centers"]
-    widths_f = file["fluidity_widths"]
-    edges_s = file["sigma_edges"]
-    centers_s = file["sigma_centers"]
-    widths_s = file["sigma_widths"]
+    edges_f = file["fluidity_edges"]  # (M + 1,)
+    centers_f = file["fluidity_centers"]  # (M,)
+    widths_f = file["fluidity_widths"]  # (M,)
+    edges_s = file["sigma_edges"]  # (N + 1,)
+    centers_s = file["sigma_centers"]  # (N,)
+    widths_s = file["sigma_widths"]  # (N,)
 
-nan_mask = np.isfinite(pdf.flatten())
+nan_mask = (
+    np.isfinite(pdf.flatten())
+    * ~np.isclose(A_f_km.flatten(), 0)
+    * ~np.isclose(C_f_km.flatten(), 0)
+    * ~np.isclose(A_s_km.flatten(), 0)
+).astype(bool)
 pdf_masked = pdf.flatten()[nan_mask]
 A_f_km_masked = A_f_km.flatten()[nan_mask]
 C_f_km_masked = C_f_km.flatten()[nan_mask]
@@ -73,18 +76,37 @@ f_mesh, s_mesh = np.meshgrid(centers_f, centers_s)
 
 N = len(centers_f)
 M = len(centers_s)
+print(f"Fluidity shape: {N=}")
+print(f"Stress shape: {M=}")
+print(f"{pdf.shape=}")
+print(f"{A_f_km.shape=}")
+print(f"{C_f_km.shape=}")
+print(f"{A_s_km.shape=}")
+print(f"{C_s_km.shape=}")
+print(f"{A_f_km_masked.shape=}")
+print(f"{C_f_km_masked.shape=}")
+print(f"{A_s_km_masked.shape=}")
+print(f"{C_s_km_masked.shape=}")
+print(f"{edges_f.shape=}")
+print(f"{centers_f.shape=}")
+print(f"{widths_f.shape=}")
+print(f"{edges_s.shape=}")
+print(f"{centers_s.shape=}")
+print(f"{widths_s.shape=}")
+print(f"{f_mesh.shape=}")
+print(f"{s_mesh.shape=}", flush=True)
 
 if args.plot_intermediate:
     fig_pdf, axes_pdf = plt.subplots(
         ncols=2, subplot_kw={"projection": "3d"}, figsize=(11, 6)
     )
     axes_pdf: list[Axes3D]
-    axes_pdf[0].plot_wireframe(np.log(f_mesh), s_mesh, pdf)
+    axes_pdf[0].plot_wireframe(np.log(f_mesh), s_mesh, pdf.T)
     axes_pdf[0].set_zlabel(r"PDF($f, \sigma$)")
     axes_pdf[0].set_ylabel(r"Stress, $\sigma$)")
     axes_pdf[0].set_xlabel(r"$\log$ Fluidity, $\log f$")
 
-    axes_pdf[1].plot_wireframe(np.log(f_mesh), s_mesh, np.log(pdf))
+    axes_pdf[1].plot_wireframe(np.log(f_mesh), s_mesh, np.log(pdf.T))
     axes_pdf[1].set_zlabel(r"$\log$ PDF($f, \sigma$)")
     axes_pdf[1].set_ylabel(r"Stress, $\sigma$")
     axes_pdf[1].set_xlabel(r"$\log$ Fluidity, $\log f$")
@@ -97,27 +119,31 @@ if args.plot_intermediate:
         nrows=2, ncols=2, subplot_kw={"projection": "3d"}, figsize=(11, 11)
     )
     axes_moments: list[list[Axes3D]]
-    axes_moments[0][0].plot_wireframe(np.log(f_mesh), s_mesh, A_f_km)
+    axes_moments[0][0].plot_wireframe(np.log(f_mesh), s_mesh, A_f_km.T)
     axes_moments[0][0].set_zlabel(r"$m^{(1, 0)}(f, \sigma)$")
+    axes_moments[0][0].set_title(r"$m^{(1, 0)}(f, \sigma)$")
     axes_moments[0][0].set_ylabel(r"Stress, $\sigma$)")
     axes_moments[0][0].set_xlabel(r"$\log$ Fluidity, $\log f$")
 
-    axes_moments[0][1].plot_wireframe(np.log(f_mesh), s_mesh, C_f_km)
+    axes_moments[0][1].plot_wireframe(np.log(f_mesh), s_mesh, C_f_km.T)
     axes_moments[0][1].set_zlabel(r"$m^{(2, 0)}(f, \sigma)$")
+    axes_moments[0][1].set_title(r"$m^{(2, 0)}(f, \sigma)$")
     axes_moments[0][1].set_ylabel(r"Stress, $\sigma$)")
     axes_moments[0][1].set_xlabel(r"$\log$ Fluidity, $\log f$")
 
-    axes_moments[1][0].plot_wireframe(np.log(f_mesh), s_mesh, A_s_km)
+    axes_moments[1][0].plot_wireframe(np.log(f_mesh), s_mesh, A_s_km.T)
     axes_moments[1][0].set_zlabel(r"$m^{(0, 1)}(f, \sigma)$")
+    axes_moments[1][0].set_title(r"$m^{(0, 1)}(f, \sigma)$")
     axes_moments[1][0].set_ylabel(r"Stress, $\sigma$)")
     axes_moments[1][0].set_xlabel(r"$\log$ Fluidity, $f$")
 
-    axes_moments[1][1].plot_wireframe(np.log(f_mesh), s_mesh, C_s_km)
+    axes_moments[1][1].plot_wireframe(np.log(f_mesh), s_mesh, C_s_km.T)
     axes_moments[1][1].set_zlabel(r"$m^{(0, 2)}(f, \sigma)$")
+    axes_moments[1][1].set_title(r"$m^{(0, 2)}(f, \sigma)$")
     axes_moments[1][1].set_ylabel(r"Stress, $\sigma$)")
     axes_moments[1][1].set_xlabel(r"$\log$ Fluidity, $\log f$")
 
-    fig_moments.tight_layout()
+    # fig_moments.tight_layout()
     fig_moments.savefig(folder_path / "moments_log_f_s.png")
     plt.close(fig_moments)
 
@@ -151,32 +177,41 @@ print(f"Regressing on library of N={num_A_f+num_C_f+num_A_s} terms")
 lib_A_f = np.empty((num_A_f, N, M))
 for k in range(num_A_f):
     lamb_expr = sympy.lambdify([f_sym, s_sym], A_f_expr[k])
-    lib_A_f[k] = lamb_expr(centers_f, centers_s)
+    val = lamb_expr(f_mesh, s_mesh)
+    if np.ndim(val) == 0:  # f^0 == 1.0, so result is 0 dim
+        val = np.full_like(f_mesh, val)
+    lib_A_f[k] = val.T
 lib_A_f = lib_A_f.reshape(-1, N * M)[..., nan_mask]
 
 lib_C_f = np.empty((num_C_f, N, M))
 for k in range(num_C_f):
     lamb_expr = sympy.lambdify([f_sym, s_sym], C_f_expr[k])
-    lib_C_f[k] = lamb_expr(centers_f, centers_s)
+    val = lamb_expr(f_mesh, s_mesh)
+    if np.ndim(val) == 0:
+        val = np.full_like(f_mesh, val)
+    lib_C_f[k] = val.T
 lib_C_f = lib_C_f.reshape(-1, N * M)[..., nan_mask]
 
 lib_A_s = np.empty((num_A_s, N, M))
 for k in range(num_A_s):
     lamb_expr = sympy.lambdify([f_sym, s_sym], A_s_expr[k])
-    lib_A_s[k] = lamb_expr(centers_f, centers_s)
+    val = lamb_expr(f_mesh, s_mesh)
+    if np.ndim(val) == 0:
+        val = np.full_like(f_mesh, val)
+    lib_A_s[k] = val.T
 lib_A_s = lib_A_s.reshape(-1, N * M)[..., nan_mask]
 # All libraries are (num_lib, Q)
 
 # Initialize Xi with least squares regression (no finite-time corrections)
-Xi0 = np.empty((num_A_f + num_C_f + num_A_s,))
-Xi0 = np.random.random(num_A_f + num_C_f + num_A_s)
+Xi0 = np.random.random(num_A_f + num_C_f + num_A_s) * 5 - 2.5
+# Xi0 = np.empty((num_A_f + num_C_f + num_A_s,))
 # mask = np.nonzero(A_f_km)[0]
 # Xi0[:num_A_f] = lstsq(lib_A_f[:, mask].T, A_f_km[mask])[0]
 # mask = np.nonzero(C_f_km)[0]  # This mask may actually be the same as previous
 # Xi0[num_A_f : num_A_f + num_C_f] = lstsq(lib_C_f[:, mask].T, C_f_km[mask])[0]
 # mask = np.nonzero(A_s_km)[0]  # This mask may actually be the same as previous
 # Xi0[num_A_f + num_C_f :] = lstsq(lib_A_s[:, mask].T, A_s_km[mask])[0]
-print("Xi0 =", Xi0)
+# print("Xi0 =", Xi0)
 # NOTE: are these initial conditions good enough for highly non-linear systems?
 
 
@@ -217,30 +252,30 @@ def cost(Xi, params):
     """
 
     # Unpack parameters
-    W = params["W"]  # Optimization weights, (3, N*M)
+    W = params["W"]  # Optimization weights, (3, Q)
 
     # Kramers-Moyal coefficients
-    A_x_KM = params["A_x_KM"]  # (N*M,)
-    A_y_KM = params["A_y_KM"]  # (N*M,)
-    C_x_KM = params["C_x_KM"]  # (N*M,)
+    A_x_KM = params["A_x_KM"]  # (Q,)
+    A_y_KM = params["A_y_KM"]  # (Q,)
+    C_x_KM = params["C_x_KM"]  # (Q,)
 
-    lib_A_x = params["lib_A_x"]  # (n_A_x, N*M)
-    lib_A_y = params["lib_A_y"]  # (n_A_y, N*M)
-    lib_C_x = params["lib_C_x"]  # (n_C_x, N*M)
+    lib_A_x = params["lib_A_x"]  # (n_A_x, Q)
+    lib_A_y = params["lib_A_y"]  # (n_A_y, Q)
+    lib_C_x = params["lib_C_x"]  # (n_C_x, Q)
 
     n_A_x = lib_A_x.shape[0]
     n_A_y = lib_A_y.shape[0]
     n_C_x = lib_C_x.shape[0]  # unused but symmetry
 
     # Construct parameterized drift and diffusion functions from libraries and current coefficients
-    A_x_vals = lib_A_x.T @ Xi[:n_A_x]  # (n_A_x, N*M).T @ (n_A_x,) = (N*M,)
-    A_y_vals = lib_A_y.T @ Xi[n_A_x : n_A_x + n_A_y]  # (N*M,)
-    C_x_vals = lib_C_x.T @ Xi[n_A_x + n_A_y :]  # (N*M,)
+    A_x_vals = lib_A_x.T @ Xi[:n_A_x]  # (n_A_x, Q).T @ (n_A_x,) = (Q,)
+    A_y_vals = lib_A_y.T @ Xi[n_A_x : n_A_x + n_A_y]  # (Q,)
+    C_x_vals = lib_C_x.T @ Xi[n_A_x + n_A_y :]  # (Q,)
 
     V = (
-        np.nansum(W[0] * np.abs((A_x_vals - A_x_KM) / A_x_KM) ** 2)
-        + np.nansum(W[1] * np.abs((A_y_vals - A_y_KM) / A_y_KM) ** 2)
-        + np.nansum(W[2] * np.abs((C_x_vals - C_x_KM) / C_x_KM) ** 2)
+        np.sum(W[0] * np.abs((A_x_vals - A_x_KM) / A_x_KM) ** 2)
+        + np.sum(W[1] * np.abs((A_y_vals - A_y_KM) / A_y_KM) ** 2)
+        + np.sum(W[2] * np.abs((C_x_vals - C_x_KM) / C_x_KM) ** 2)
     )
 
     return V
@@ -343,21 +378,21 @@ def SSR_loop(opt_fun, params):
 
 
 # Optimization parameters
-weight = np.ones_like(pdf.flatten()[nan_mask])  # 1 / pdf
+weight = np.ones_like(pdf_masked)
 weight /= np.nansum(weight)
 W = np.array([weight, weight, weight])  # Weights from pdf values
 params = {
-    "W": W,
-    "A_x_KM": A_f_km_masked,  # (101*101,) -> (Q,)
-    "C_x_KM": C_f_km_masked,
-    "A_y_KM": A_s_km_masked,
-    "Xi0": Xi0,
-    "A_x_expr": A_f_expr,
-    "A_y_expr": A_s_expr,
-    "C_x_expr": C_f_expr,
-    "lib_A_x": lib_A_f,  # (..., 101*101) -> (..., Q)
-    "lib_A_y": lib_A_s,
-    "lib_C_x": lib_C_f,
+    "W": W,  # (3, Q)
+    "A_x_KM": A_f_km_masked,  # (Q,)
+    "C_x_KM": C_f_km_masked,  # (Q,)
+    "A_y_KM": A_s_km_masked,  # (Q,)
+    "Xi0": Xi0,  # (n_A_f + n_A_s + n_C_f,)
+    "A_x_expr": A_f_expr,  # (n_A_f,)
+    "A_y_expr": A_s_expr,  # (n_A_s,)
+    "C_x_expr": C_f_expr,  # (n_C_f,)
+    "lib_A_x": lib_A_f,  # (n_A_f, Q)
+    "lib_A_y": lib_A_s,  # (n_A_s, Q)
+    "lib_C_x": lib_C_f,  # (n_C_f, Q)
 }
 
 # Use anonymous function to automatically pass the cost function
@@ -374,9 +409,9 @@ labels = [
 
 n_terms = len(labels)
 
-fig_SSR, (ax_full_cost, ax_cost, ax_history) = plt.subplots(nrows=3, figsize=(12, 20))
+fig_SSR, (ax_full_cost, ax_dcost, ax_history) = plt.subplots(nrows=3, figsize=(12, 20))
 ax_full_cost: plt.Axes  # type: ignore
-ax_cost: plt.Axes  # type: ignore
+ax_dcost: plt.Axes  # type: ignore
 ax_history: plt.Axes  # type: ignore
 # ignore the first point as it is usually very large
 for x, y in zip(np.arange(len(V))[1:], cost_values[1:]):
@@ -389,12 +424,15 @@ ax_full_cost.set_xlim(-0.5, n_terms - 2.5)
 ax_full_cost.set_xlabel("Sparsity")
 ax_full_cost.set_ylabel(r"Cost, $\log V$")
 
-ax_cost.scatter(np.arange(len(V))[1:], np.log(V)[1:], c="k")
-ax_cost.set_xticks(np.arange(n_terms - 2))
-ax_cost.set_xticklabels(np.arange(n_terms, 2, -1))
-ax_cost.set_xlim(-0.5, n_terms - 2.5)
-ax_cost.set_xlabel("Sparsity")
-ax_cost.set_ylabel(r"Cost, $\log V$")
+difs = np.log(V)[1:] - np.log(V)[:-1]
+ax_dcost.scatter(np.arange(len(V))[:-1], difs, c="k")
+ax_dcost.set_xticks(np.arange(n_terms - 2))
+ax_dcost.set_xticklabels(np.arange(n_terms, 2, -1))
+ax_dcost.set_xlim(-0.5, n_terms - 2.5)
+bot = np.max(0, np.min(difs) * 0.9)
+ax_dcost.set_ylim(bottom=0)
+ax_dcost.set_xlabel("Sparsity")
+ax_dcost.set_ylabel(r"dCost, $d \log V$")
 
 square = np.zeros_like(Xi)
 for i, hist in enumerate(active_history):
@@ -419,11 +457,11 @@ plt.close(fig_SSR)
 
 n_terms = len(labels)
 
-fig_SSR_reduced, (ax_full_cost, ax_cost, ax_history) = plt.subplots(
+fig_SSR_reduced, (ax_full_cost, ax_dcost, ax_history) = plt.subplots(
     nrows=3, figsize=(12, 20)
 )
 ax_full_cost: plt.Axes  # type: ignore
-ax_cost: plt.Axes  # type: ignore
+ax_dcost: plt.Axes  # type: ignore
 ax_history: plt.Axes  # type: ignore
 # ignore the first point as it is usually very large
 skip = 10
@@ -431,18 +469,18 @@ for x, y in zip(np.arange(len(V))[skip:], cost_values[skip:]):
     for z in y:
         ax_full_cost.scatter(x, np.log(z), c="k", alpha=0.2)
 ax_full_cost.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k")
-ax_full_cost.set_xticks(np.arange(skip, n_terms - 2))
+ax_full_cost.set_xticks(np.arange(n_terms - 2))
 ax_full_cost.set_xticklabels(np.arange(n_terms, 2, -1))
 ax_full_cost.set_xlim(-0.5, n_terms - 2.5)
 ax_full_cost.set_xlabel("Sparsity")
 ax_full_cost.set_ylabel(r"Cost, $\log V$")
 
-ax_cost.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k")
-ax_cost.set_xticks(np.arange(n_terms - 2))
-ax_cost.set_xticklabels(np.arange(n_terms, 2, -1))
-ax_cost.set_xlim(-0.5, n_terms - 2.5)
-ax_cost.set_xlabel("Sparsity")
-ax_cost.set_ylabel(r"Cost, $\log V$")
+ax_dcost.scatter(np.arange(len(V))[skip:], np.log(V)[skip:], c="k")
+ax_dcost.set_xticks(np.arange(n_terms - 2))
+ax_dcost.set_xticklabels(np.arange(n_terms, 2, -1))
+ax_dcost.set_xlim(-0.5, n_terms - 2.5)
+ax_dcost.set_xlabel("Sparsity")
+ax_dcost.set_ylabel(r"Cost, $\log V$")
 
 square = np.zeros_like(Xi)
 for i, hist in enumerate(active_history):
@@ -532,13 +570,13 @@ for a in axes_km_vals:
         b.set_xlabel(r"$f$")
         b.set_ylabel(r"$\sigma$")
 
-fig_km_vals.tight_layout()
+# fig_km_vals.tight_layout()
 fig_km_vals.savefig(folder_path / "final_graph_log_f_s.png")
 
 for a in axes_km_vals:
     for b in a:
         b.set_xscale("log")
 
-fig_km_vals.tight_layout()
+# fig_km_vals.tight_layout()
 fig_km_vals.savefig(folder_path / "final_graph_log_f_s_logscale.png")
 plt.close(fig_km_vals)
