@@ -218,59 +218,18 @@ def do_test(
             found_pdfs=np.asarray(found_pdfs),
         )
 
-    fig_cost, ax_cost = plt.subplots()
-    fig_diff, axes_diff = plt.subplots(len(diffs), figsize=(6, len(diffs) * 3))
-    fig_pdfs, ax_pdfs = plt.subplots()
-    fig_found_pdfs, ax_found_pdfs = plt.subplots()
-    if logx:
-        ax_cost.semilogx(range_var, costs)
-        for diff, ax_diff in zip(diffs, axes_diff):
-            ax_diff.semilogx(range_var, diff)
-    else:
-        ax_cost.plot(range_var, costs)
-        for diff, ax_diff in zip(diffs, axes_diff):
-            ax_diff.plot(range_var, diff)
-    ax_cost.set_xlabel(f"{target_var}")
-    ax_cost.set_ylabel("Cost / misfit, V")
-    for ax_diff, coeff_lab in zip(axes_diff, coeff_labels):
-        ax_diff.set_xlabel(f"{target_var}")
-        ax_diff.set_title(
-            rf"Absolute difference, $\left|\Delta\xi_{coeff_lab}\right / \xi_{{true}}|$"
-        )
-    colours = getattr(plt.cm, "jet")(np.linspace(0.1, 0.9, len(pdfs)))
-    GIVELABELS = np.linspace(0, len(pdfs), ONLYLABEL, endpoint=True).astype(int)
-    for i, center, pdf, var, colour in zip(
-        range(len(pdfs)), centers, pdfs, range_var, colours
-    ):
-        if i in GIVELABELS:
-            ax_pdfs.plot(center, pdf, color=colour, label=f"{target_var}={var:.2e}")
-        else:
-            ax_pdfs.plot(center, pdf, color=colour)
-    ax_pdfs.set_xlabel("x")
-    ax_pdfs.set_ylabel("pdf(x)")
-    ax_pdfs.legend()
-
-    for i, center, found_pdf, var, colour in zip(
-        range(len(pdfs)), centers, found_pdfs, range_var, colours
-    ):
-        if i in GIVELABELS:
-            ax_found_pdfs.plot(
-                center, found_pdf, color=colour, label=f"{target_var}={var:.2e}"
-            )
-        else:
-            ax_found_pdfs.plot(center, found_pdf, color=colour)
-    ax_found_pdfs.set_xlabel("x")
-    ax_found_pdfs.set_ylabel("pdf(x)")
-    ax_found_pdfs.legend()
-
-    fig_cost.tight_layout()
-    fig_diff.tight_layout()
-    fig_pdfs.tight_layout()
-    fig_found_pdfs.tight_layout()
-    fig_cost.savefig(SCRATCH_PATH / f"cost_vs_{target_var}.png")
-    fig_diff.savefig(SCRATCH_PATH / f"diff_vs_{target_var}.png")
-    fig_pdfs.savefig(SCRATCH_PATH / f"pdf_vs_{target_var}.png")
-    fig_found_pdfs.savefig(SCRATCH_PATH / f"found_pdf_vs_{target_var}.png")
+    do_plot(
+        target_var,
+        range_var,
+        costs,
+        diffs,
+        centers,
+        pdfs,
+        found_pdfs,
+        logx,
+        coeff_labels,
+        ONLYLABEL,
+    )
 
     print(f"{target_var}, finished at {time() - start}", flush=True)
 
@@ -315,7 +274,34 @@ def do_test_coeffs(
             pdfs=np.asarray(pdfs),
             found_pdfs=np.asarray(found_pdfs),
         )
+    do_plot(
+        target_name,
+        range_var,
+        costs,
+        diffs,
+        centers,
+        pdfs,
+        found_pdfs,
+        logx,
+        coeff_labels,
+        ONLYLABEL,
+    )
 
+    print(f"{target_name}, finished at {time() - start}", flush=True)
+
+
+def do_plot(
+    target_var,
+    range_var,
+    costs,
+    diffs,
+    centers,
+    pdfs,
+    found_pdfs,
+    logx=True,
+    coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
+    ONLYLABEL=5,
+):
     fig_cost, ax_cost = plt.subplots()
     fig_diff, axes_diff = plt.subplots(len(diffs), figsize=(6, len(diffs) * 3))
     fig_pdfs, ax_pdfs = plt.subplots()
@@ -328,70 +314,106 @@ def do_test_coeffs(
         ax_cost.plot(range_var, costs)
         for diff, ax_diff in zip(diffs, axes_diff):
             ax_diff.plot(range_var, diff)
-    ax_cost.set_xlabel(f"{target_name}")
+    ax_cost.set_xlabel(f"{target_var}")
     ax_cost.set_ylabel("Cost / misfit, V")
     for ax_diff, coeff_lab in zip(axes_diff, coeff_labels):
-        ax_diff.set_xlabel(f"{target_name}")
+        ax_diff.set_xlabel(f"{target_var}")
         ax_diff.set_title(
-            rf"Absolute difference, $\left|\Delta\xi_{coeff_lab}\right / \xi_{{true}}|$"
+            rf"Absolute difference, $\left|\Delta\xi_{'{'}{coeff_lab}{'}'}\right / \xi_{'{true}'}|$"
         )
-
     colours = getattr(plt.cm, "jet")(np.linspace(0.1, 0.9, len(pdfs)))
-    GIVELABELS = np.linspace(0, len(pdfs), ONLYLABEL, endpoint=True).astype(int)
-    for i, center, pdf, var, colour in zip(
-        range(len(pdfs)), centers, pdfs, range_var, colours
-    ):
-        if i in GIVELABELS:
-            ax_pdfs.plot(center, pdf, color=colour, label=f"{target_name}={var:.2e}")
-        else:
-            ax_pdfs.plot(center, pdf, color=colour)
+    for center, pdf, colour in zip(centers, pdfs, colours):
+        ax_pdfs.plot(center, pdf, color=colour)
+    q = plt.cm.ScalarMappable(None, "jet")
+    if logx:
+        q.set_clim(np.log10(range_var[0]), np.log10(range_var[-1]))
+        ticks = np.log10(range_var)
+        label = f"log {target_var}"
+    else:
+        q.set_clim(range_var[0], range_var[-1])
+        ticks = range_var
+        label = f"{target_var}"
+
+    fig_pdfs.colorbar(q, ax=ax_pdfs, ticks=ticks, label=label)
+
     ax_pdfs.set_xlabel("x")
     ax_pdfs.set_ylabel("pdf(x)")
-    ax_pdfs.legend()
 
-    for i, center, found_pdf, var, colour in zip(
-        range(len(pdfs)), centers, found_pdfs, range_var, colours
-    ):
-        if i in GIVELABELS:
-            ax_found_pdfs.plot(
-                center, found_pdf, color=colour, label=f"{target_name}={var:.2e}"
-            )
-        else:
-            ax_found_pdfs.plot(center, found_pdf, color=colour)
+    for center, found_pdf, colour in zip(centers, found_pdfs, colours):
+        ax_found_pdfs.plot(center, found_pdf, color=colour)
+    fig_found_pdfs.colorbar(q, ax=ax_found_pdfs, ticks=ticks, label=label)
     ax_found_pdfs.set_xlabel("x")
     ax_found_pdfs.set_ylabel("pdf(x)")
-    ax_found_pdfs.legend()
 
     fig_cost.tight_layout()
     fig_diff.tight_layout()
     fig_pdfs.tight_layout()
     fig_found_pdfs.tight_layout()
-    fig_cost.savefig(SCRATCH_PATH / f"cost_vs_{target_name}.png")
-    fig_diff.savefig(SCRATCH_PATH / f"diff_vs_{target_name}.png")
-    fig_pdfs.savefig(SCRATCH_PATH / f"pdf_vs_{target_name}.png")
-    fig_found_pdfs.savefig(SCRATCH_PATH / f"found_pdf_vs_{target_name}.png")
+    fig_cost.savefig(SCRATCH_PATH / f"cost_vs_{target_var}.png")
+    fig_diff.savefig(SCRATCH_PATH / f"diff_vs_{target_var}.png")
+    fig_pdfs.savefig(SCRATCH_PATH / f"pdf_vs_{target_var}.png")
+    fig_found_pdfs.savefig(SCRATCH_PATH / f"found_pdf_vs_{target_var}.png")
+    plt.close(fig_cost)
+    plt.close(fig_diff)
+    plt.close(fig_pdfs)
+    plt.close(fig_found_pdfs)
 
-    print(f"{target_name}, finished at {time() - start}", flush=True)
+
+def do_load(target_var):
+    with np.load(SCRATCH_PATH / f"test_{target_var}.npz") as f:
+        # range_var = f["range_var"]
+        costs = f["costs"]
+        diffs = f["diffs"]
+        centers = f["centers"]
+        pdfs = f["pdfs"]
+        found_pdfs = f["found_pdfs"]
+    return (
+        # range_var,
+        costs,
+        diffs,
+        centers,
+        pdfs,
+        found_pdfs,
+    )
 
 
-### program splits
-if rank == (0 % size):
-    do_test("num_datapoints", np.logspace(6, 9, 20).astype(int))
-elif rank == (1 % size):
-    do_test("kl_reg", np.logspace(-10, 0, 20))
-elif rank == (2 % size):
-    do_test("dt", np.logspace(-5, -1.5, 10))
-elif rank == (3 % size):
-    do_test("num_bins", np.logspace(1, 4, 20).astype(int))
-elif rank == (4 % size):
-    do_test("ep0", np.logspace(-7, 0, 20))
-elif rank == (5 % size):
-    do_test("ep1", np.logspace(-7, 0, 20))
-elif rank == (6 % size):
-    do_test_coeffs("ax", 1, np.linspace(-3, 3, 20), logx=False)
-elif rank == (7 % size):
-    do_test_coeffs("bx3", 3, np.linspace(-3, 3, 20), logx=False)
-elif rank == (8 % size):
-    do_test_coeffs("cx4", 4, np.linspace(-1, -0.01, 20, endpoint=False), logx=False)
-else:
-    print("Over extended:", rank, size, flush=True)
+# ### program splits
+# if rank == (0 % size):
+#     do_test("num_datapoints", np.logspace(6, 9, 20).astype(int))
+# elif rank == (1 % size):
+#     do_test("kl_reg", np.logspace(-10, 0, 20))
+# elif rank == (2 % size):
+#     do_test("dt", np.logspace(-5, -1.5, 10))
+# elif rank == (3 % size):
+#     do_test("num_bins", np.logspace(1, 4, 20).astype(int))
+# elif rank == (4 % size):
+#     do_test("ep0", np.logspace(-7, 0, 20))
+# elif rank == (5 % size):
+#     do_test("ep1", np.logspace(-7, 0, 20))
+# elif rank == (6 % size):
+#     do_test_coeffs("ax", 1, np.linspace(-3, 3, 20), logx=False)
+# elif rank == (7 % size):
+#     do_test_coeffs("bx3", 3, np.linspace(-3, 3, 20), logx=False)
+# elif rank == (8 % size):
+#     do_test_coeffs("cx4", 4, np.linspace(-1, -0.01, 20, endpoint=False), logx=False)
+# else:
+#     print("Over extended:", rank, size, flush=True)
+
+# range_var = np.logspace(6, 9, 20).astype(int)
+# do_plot("num_datapoints", range_var, *do_load("num_datapoints"))
+range_var = np.logspace(-10, 0, 20)
+do_plot("kl_reg", range_var, *do_load("kl_reg"))
+range_var = np.logspace(-5, -1.5, 10)
+do_plot("dt", range_var, *do_load("dt"))
+# range_var = np.logspace(1, 4, 20).astype(int)
+# do_plot("num_bins", range_var, *do_load("num_bins"))
+range_var = np.logspace(-7, 0, 20)
+do_plot("ep0", range_var, *do_load("ep0"))
+range_var = np.logspace(-7, 0, 20)
+do_plot("ep1", range_var, *do_load("ep1"))
+range_var = np.linspace(-3, 3, 20)
+do_plot("ax", range_var, *do_load("ax"), logx=False)
+range_var = np.linspace(-3, 3, 20)
+do_plot("bx3", range_var, *do_load("bx3"), logx=False)
+range_var = np.linspace(-1, -0.01, 20, endpoint=False)
+do_plot("cx4", range_var, *do_load("cx4"), logx=False)
