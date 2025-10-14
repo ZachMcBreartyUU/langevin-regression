@@ -165,7 +165,7 @@ def run_fixed_model(
 
     found_pdf = sfp.solve(A_sindy, C_sindy)
 
-    differences = np.abs(xi - true_model_xi)
+    differences = np.abs((xi - true_model_xi) / true_model_xi)
     return xi, cost_val, differences, centers_x, pdf, found_pdf
 
 
@@ -208,7 +208,7 @@ def do_test(
     diffs = np.array(diffs).T
 
     fig_cost, ax_cost = plt.subplots()
-    fig_diff, axes_diff = plt.subplots(len(diffs))
+    fig_diff, axes_diff = plt.subplots(len(diffs), figsize=(6, len(diffs) * 3))
     fig_pdfs, ax_pdfs = plt.subplots()
     fig_found_pdfs, ax_found_pdfs = plt.subplots()
     if logx:
@@ -223,8 +223,8 @@ def do_test(
     ax_cost.set_ylabel("Cost / misfit, V")
     for ax_diff, coeff_lab in zip(axes_diff, coeff_labels):
         ax_diff.set_xlabel(f"{target_var}")
-        ax_diff.set_ylabel(
-            rf"Absolute difference, $\left|\Delta\xi_{coeff_lab}\right|$"
+        ax_diff.set_title(
+            rf"Absolute difference, $\left|\Delta\xi_{coeff_lab}\right / \xi_{{true}}|$"
         )
     skip = int(len(pdfs) // ONLYPLOT)
     slce = slice(skip // 2, None, skip)
@@ -288,7 +288,7 @@ def do_test_coeffs(
     diffs = np.array(diffs).T
 
     fig_cost, ax_cost = plt.subplots()
-    fig_diff, axes_diff = plt.subplots(len(diffs))
+    fig_diff, axes_diff = plt.subplots(len(diffs), figsize=(6, len(diffs) * 3))
     fig_pdfs, ax_pdfs = plt.subplots()
     fig_found_pdfs, ax_found_pdfs = plt.subplots()
     if logx:
@@ -303,8 +303,8 @@ def do_test_coeffs(
     ax_cost.set_ylabel("Cost / misfit, V")
     for ax_diff, coeff_lab in zip(axes_diff, coeff_labels):
         ax_diff.set_xlabel(f"{target_name}")
-        ax_diff.set_ylabel(
-            rf"Absolute difference, $\left|\Delta\xi_{coeff_lab}\right|$"
+        ax_diff.set_title(
+            rf"Absolute difference, $\left|\Delta\xi_{coeff_lab}\right / \xi_{{true}}|$"
         )
 
     skip = int(len(pdfs) // ONLYPLOT)
