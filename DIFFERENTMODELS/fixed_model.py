@@ -207,6 +207,16 @@ def do_test(
         found_pdfs.append(found_pdf)
     diffs = np.array(diffs).T
 
+    with open(f"test_{target_var}.npz", "wb") as f:
+        np.savez(
+            f,
+            costs=np.asarray(costs),
+            diffs=np.asarray(diffs),
+            centers=np.asarray(centers),
+            pdfs=np.asarray(pdfs),
+            found_pdfs=np.asarray(found_pdfs),
+        )
+
     fig_cost, ax_cost = plt.subplots()
     fig_diff, axes_diff = plt.subplots(len(diffs), figsize=(6, len(diffs) * 3))
     fig_pdfs, ax_pdfs = plt.subplots()
@@ -286,6 +296,16 @@ def do_test_coeffs(
         pdfs.append(pdf)
         found_pdfs.append(found_pdf)
     diffs = np.array(diffs).T
+
+    with open(f"test_{target_name}.npz", "wb") as f:
+        np.savez(
+            f,
+            costs=np.asarray(costs),
+            diffs=np.asarray(diffs),
+            centers=np.asarray(centers),
+            pdfs=np.asarray(pdfs),
+            found_pdfs=np.asarray(found_pdfs),
+        )
 
     fig_cost, ax_cost = plt.subplots()
     fig_diff, axes_diff = plt.subplots(len(diffs), figsize=(6, len(diffs) * 3))
