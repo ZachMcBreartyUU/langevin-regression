@@ -184,7 +184,7 @@ def do_test(
     target_var,
     range_var,
     logx=True,
-    coeff_labels=["x", "x^3", "x^3|x|"],
+    coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
     ONLYPLOT=5,
 ):
     start = time()
@@ -273,7 +273,7 @@ def do_test_coeffs(
     range_var,
     default_coeffs=[0.0, -1.0, 0.0, 1.0, -1 / 3],
     logx=True,
-    coeff_labels=["x", "x^3", "x^3|x|"],
+    coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
     ONLYPLOT=5,
 ):
 
