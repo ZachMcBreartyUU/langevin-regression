@@ -207,9 +207,10 @@ def do_test(
         found_pdfs.append(found_pdf)
     diffs = np.array(diffs).T
 
-    with open(f"test_{target_var}.npz", "wb") as f:
+    with open(SCRATCH_PATH / f"test_{target_var}.npz", "wb") as f:
         np.savez(
             f,
+            range_var=np.asarray(range_var),
             costs=np.asarray(costs),
             diffs=np.asarray(diffs),
             centers=np.asarray(centers),
@@ -304,9 +305,10 @@ def do_test_coeffs(
         found_pdfs.append(found_pdf)
     diffs = np.array(diffs).T
 
-    with open(f"test_{target_name}.npz", "wb") as f:
+    with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
         np.savez(
             f,
+            range_var=np.asarray(range_var),
             costs=np.asarray(costs),
             diffs=np.asarray(diffs),
             centers=np.asarray(centers),
