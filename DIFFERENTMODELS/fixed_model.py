@@ -69,11 +69,12 @@ def run_fixed_model(
 
     ## Perform Kramers Moyal
     edges = np.linspace(np.min(x_data), np.max(x_data), num_bins + 1)
+    dedges = edges[1:] - edges[:-1]
     # edges = np.linspace(-0.005, 0.005, num_bins + 1)
     kmc, centers = km(x_data[..., None], bins=(edges,), powers=2)  # type: ignore
     pdf, moment_1, moment_2 = kmc
     centers_x = centers[0]
-    pdf /= np.nansum(pdf)
+    pdf /= np.nansum(pdf * dedges)
     moment_1 /= dt
     moment_2 /= dt
     del x_data
