@@ -86,11 +86,8 @@ def cost_KL(Xi, params):
 
     # Penalise an equation with non-negative coefficient on largest term
     if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
-        pen = 100
-    else:
-        pen = 1
-
-    return (V + KL_val) * pen
+        return np.inf
+    return V + KL_val
 
 
 def optimise_function(cost, params, maxfev=1e5):
@@ -260,5 +257,5 @@ class SteadyFP:
         q_hat = np.linalg.lstsq(self.A[1:, 1:], -self.A[1:, 0], rcond=1e-6)[0]
         q_hat = np.append([1], q_hat)
         hist = np.real(ifftn(np.reshape(q_hat, self.N))) / np.prod(self.dx)
-        hist /= np.nansum(hist)
+        hist /= np.nansum(hist * self.dx)
         return hist
