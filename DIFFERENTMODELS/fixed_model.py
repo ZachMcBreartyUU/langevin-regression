@@ -185,7 +185,7 @@ def do_test(
     range_var,
     logx=True,
     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
-    ONLYPLOT=5,
+    ONLYLABEL=5,
 ):
     start = time()
     print(f"{target_var} started", flush=True)
@@ -236,21 +236,28 @@ def do_test(
         ax_diff.set_title(
             rf"Absolute difference, $\left|\Delta\xi_{coeff_lab}\right / \xi_{{true}}|$"
         )
-    skip = int(len(pdfs) // ONLYPLOT)
-    slce = slice(skip // 2, None, skip)
-    for center, pdf, var in zip(centers[slce], pdfs[slce], range_var[slce]):
-        ax_pdfs.plot(center, pdf, label=f"{target_var}={var}")
+    colours = getattr(plt.cm, "jet")(np.linspace(0.1, 0.9, len(pdfs)))
+    GIVELABELS = np.linspace(0, len(pdfs), ONLYLABEL, endpoint=True).astype(int)
+    for i, center, pdf, var, colour in zip(
+        range(len(pdfs)), centers, pdfs, range_var, colours
+    ):
+        if i in GIVELABELS:
+            ax_pdfs.plot(center, pdf, color=colour, label=f"{target_var}={var:.2e}")
+        else:
+            ax_pdfs.plot(center, pdf, color=colour)
     ax_pdfs.set_xlabel("x")
     ax_pdfs.set_ylabel("pdf(x)")
     ax_pdfs.legend()
 
-    skip = int(len(found_pdfs) // ONLYPLOT)
-    for center, found_pdf, var in zip(
-        centers[slce],
-        found_pdfs[slce],
-        range_var[slce],
+    for i, center, found_pdf, var, colour in zip(
+        range(len(pdfs)), centers, found_pdfs, range_var, colours
     ):
-        ax_found_pdfs.plot(center, found_pdf, label=f"{target_var}={var}")
+        if i in GIVELABELS:
+            ax_found_pdfs.plot(
+                center, found_pdf, color=colour, label=f"{target_var}={var:.2e}"
+            )
+        else:
+            ax_found_pdfs.plot(center, found_pdf, color=colour)
     ax_found_pdfs.set_xlabel("x")
     ax_found_pdfs.set_ylabel("pdf(x)")
     ax_found_pdfs.legend()
@@ -274,7 +281,7 @@ def do_test_coeffs(
     default_coeffs=[0.0, -1.0, 0.0, 1.0, -1 / 3],
     logx=True,
     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
-    ONLYPLOT=5,
+    ONLYLABEL=5,
 ):
 
     start = time()
@@ -327,20 +334,28 @@ def do_test_coeffs(
             rf"Absolute difference, $\left|\Delta\xi_{coeff_lab}\right / \xi_{{true}}|$"
         )
 
-    skip = int(len(pdfs) // ONLYPLOT)
-    slce = slice(skip // 2, None, skip)
-    for center, pdf, var in zip(centers[slce], pdfs[slce], range_var[slce]):
-        ax_pdfs.plot(center, pdf, label=f"{target_name}={var}")
+    colours = getattr(plt.cm, "jet")(np.linspace(0.1, 0.9, len(pdfs)))
+    GIVELABELS = np.linspace(0, len(pdfs), ONLYLABEL, endpoint=True).astype(int)
+    for i, center, pdf, var, colour in zip(
+        range(len(pdfs)), centers, pdfs, range_var, colours
+    ):
+        if i in GIVELABELS:
+            ax_pdfs.plot(center, pdf, color=colour, label=f"{target_name}={var:.2e}")
+        else:
+            ax_pdfs.plot(center, pdf, color=colour)
     ax_pdfs.set_xlabel("x")
     ax_pdfs.set_ylabel("pdf(x)")
     ax_pdfs.legend()
 
-    for center, found_pdf, var in zip(
-        centers[slce],
-        found_pdfs[slce],
-        range_var[slce],
+    for i, center, found_pdf, var, colour in zip(
+        range(len(pdfs)), centers, found_pdfs, range_var, colours
     ):
-        ax_found_pdfs.plot(center, found_pdf, label=f"{target_name}={var}")
+        if i in GIVELABELS:
+            ax_found_pdfs.plot(
+                center, found_pdf, color=colour, label=f"{target_name}={var:.2e}"
+            )
+        else:
+            ax_found_pdfs.plot(center, found_pdf, color=colour)
     ax_found_pdfs.set_xlabel("x")
     ax_found_pdfs.set_ylabel("pdf(x)")
     ax_found_pdfs.legend()
@@ -359,13 +374,13 @@ def do_test_coeffs(
 
 ### program splits
 if rank == (0 % size):
-    do_test("num_datapoints", np.logspace(5, 8, 20).astype(int))
+    do_test("num_datapoints", np.logspace(6, 9, 20).astype(int))
 elif rank == (1 % size):
-    do_test("kl_reg", np.logspace(-6, 0, 20))
+    do_test("kl_reg", np.logspace(-10, 0, 20))
 elif rank == (2 % size):
     do_test("dt", np.logspace(-5, -1.5, 10))
 elif rank == (3 % size):
-    do_test("num_bins", np.logspace(1, 3, 20).astype(int))
+    do_test("num_bins", np.logspace(1, 4, 20).astype(int))
 elif rank == (4 % size):
     do_test("ep0", np.logspace(-7, 0, 20))
 elif rank == (5 % size):
