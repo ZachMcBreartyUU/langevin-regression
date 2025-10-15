@@ -163,8 +163,8 @@ def run_fixed_model(
     ## Directly compare True answer to Found answer
     true_model_xi = np.zeros(n_terms)
     true_model_xi[:num_A_expr] = np.array(coeffs)[np.nonzero(coeffs)]
-    true_model_xi[num_A_expr + 0] = ep0
-    true_model_xi[num_A_expr + 1] = ep1
+    true_model_xi[num_A_expr + 0] = ep0 / 2  # B = sqrt(ep0 + ep1 x^2) ->
+    true_model_xi[num_A_expr + 1] = ep1 / 2  # C = B^2 / 2 -> ep0 / 2 + ep1 / 2 x^2
 
     found_pdf = sfp.solve(A_sindy, C_sindy)
 
