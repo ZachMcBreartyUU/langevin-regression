@@ -118,6 +118,9 @@ def run_fixed_model(
     Xi0 = np.empty((num_A_expr + num_C_expr))
     Xi0[:num_A_expr] = lstsq(lib_A.T, moment_1)[0]
     Xi0[num_A_expr:] = lstsq(lib_C.T, moment_2)[0]
+
+    if Xi0[-1] > 0:
+        Xi0[-1] *= -1
     # print(f"{Xi0=}")
     if PDF_WEIGHTS:
         weight = pdf
