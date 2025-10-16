@@ -188,10 +188,12 @@ def do_test(
     range_var,
     logx=True,
     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
-    ONLYLABEL=5,
+    target_name=None,
 ):
+    if target_name is None:
+        target_name = target_var
     start = time()
-    print(f"{target_var} started", flush=True)
+    print(f"{target_name} targeting {target_var} started", flush=True)
 
     costs = []
     diffs = []
@@ -210,7 +212,7 @@ def do_test(
         found_pdfs.append(found_pdf)
     diffs = np.array(diffs).T
 
-    with open(SCRATCH_PATH / f"test_{target_var}.npz", "wb") as f:
+    with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
         np.savez(
             f,
             range_var=np.asarray(range_var),
@@ -222,7 +224,7 @@ def do_test(
         )
 
     do_plot(
-        target_var,
+        target_name,
         range_var,
         costs,
         diffs,
@@ -231,7 +233,6 @@ def do_test(
         found_pdfs,
         logx,
         coeff_labels,
-        ONLYLABEL,
     )
 
     print(f"{target_var}, finished at {time() - start}", flush=True)
@@ -244,7 +245,6 @@ def do_test_coeffs(
     default_coeffs=[0.0, -1.0, 0.0, 1.0, -1 / 3],
     logx=True,
     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
-    ONLYLABEL=5,
 ):
 
     start = time()
@@ -287,7 +287,6 @@ def do_test_coeffs(
         found_pdfs,
         logx,
         coeff_labels,
-        ONLYLABEL,
     )
 
     print(f"{target_name}, finished at {time() - start}", flush=True)
