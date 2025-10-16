@@ -1,10 +1,8 @@
-from pathlib import Path
 from typing import Optional
 from time import time
+from multiprocessing import Pool
 
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.axisartist import Axes  # typing
 from numpy.linalg import lstsq
 
 # sindy libraries
@@ -35,9 +33,9 @@ def run_fixed_model(
     num_datapoints=10_000_000,
     num_bins=100,
     kl_reg=0.001,
-    ep0=0.2,
+    ep0=1e-5,
     ep1=0.1,
-    coeffs=[0.0, -1.0, 0.0, 1.0, -1 / 3],
+    coeffs=[0.0, -0.016, 0.0, 1.35, -1],
     x0=0.0,
     seed: Optional[int] = None,
 ):
@@ -173,6 +171,10 @@ def run_fixed_model(
     return xi, cost_val, differences, centers_x, pdf, found_pdf
 
 
+def run_fixed_model_dict(dict_):
+    return run_fixed_model(True, False, **dict_)
+
+
 from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
@@ -196,6 +198,7 @@ def do_test(
     start = time()
     print(f"{target_name} targeting {target_var} started", flush=True)
 
+    xis = []
     costs = []
     diffs = []
     centers = []
@@ -206,6 +209,7 @@ def do_test(
         xi, cost, diff, center, pdf, found_pdf = run_fixed_model(
             **{target_var: var}, seed=seed
         )
+        xis.append(xi)
         costs.append(cost)
         diffs.append(diff)
         centers.append(center)
@@ -216,6 +220,83 @@ def do_test(
     with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
         np.savez(
             f,
+            xis=np.asarray(xis),
+            range_var=np.asarray(range_var),
+            costs=np.asarray(costs),
+            diffs=np.asarray(diffs),
+            centers=np.asarray(centers),
+            pdfs=np.asarray(pdfs),
+            found_pdfs=np.asarray(found_pdfs),
+        )
+
+    do_plot(
+        target_name,
+        range_var,
+        costs,
+        diffs,
+        centers,
+        pdfs,
+        found_pdfs,
+        logx,
+        coeff_labels,
+    )
+
+    print(f"{target_var}, finished at {time() - start}", flush=True)
+
+
+def do_test_parallel(
+    target_var,
+    range_var,
+    logx=True,
+    coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
+    target_name=None,
+    POOLSIZE=None,
+):
+    if target_name is None:
+        target_name = target_var
+    start = time()
+    params = {
+        "dt": 0.001,
+        "num_datapoints": 10000000,
+        "num_bins": 100,
+        "kl_reg": 0.001,
+        "ep0": 1e-5,
+        "ep1": 0.1,
+        "coeffs": [0, -0.016, 0, 1.35, -1],
+        "x0": 0,
+        "seed": seed,
+    }
+    print(
+        f"{target_name} targeting {target_var} started with params {params}", flush=True
+    )
+    params_list = []
+    for var in range_var:
+        params_copy = params.copy()
+        params_copy[target_var] = var
+        params_list.append(params_copy)
+
+    with Pool(POOLSIZE) as p:
+        res = p.map(run_fixed_model_dict, params_list)
+
+    xis = []
+    costs = []
+    diffs = []
+    centers = []
+    pdfs = []
+    found_pdfs = []
+    for xi, cost, diff, center, pdf, found_pdf in res:
+        xis.append(xi)
+        costs.append(cost)
+        diffs.append(diff)
+        centers.append(center)
+        pdfs.append(pdf)
+        found_pdfs.append(found_pdf)
+    diffs = np.array(diffs).T
+
+    with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
+        np.savez(
+            f,
+            xis=np.asarray(xis),
             range_var=np.asarray(range_var),
             costs=np.asarray(costs),
             diffs=np.asarray(diffs),
@@ -243,13 +324,14 @@ def do_test_coeffs(
     target_name,
     target_index,
     range_var,
-    default_coeffs=[0.0, -1.0, 0.0, 1.0, -1 / 3],
+    default_coeffs=[0.0, -0.016, 0.0, 1.35, -1],
     logx=True,
     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
 ):
 
     start = time()
     print(f"{target_name} started", flush=True)
+    xis = []
     costs = []
     diffs = []
     centers = []
@@ -261,6 +343,7 @@ def do_test_coeffs(
         xi, cost, diff, center, pdf, found_pdf = run_fixed_model(
             coeffs=default_coeffs, seed=seed
         )
+        xis.append(xi)
         costs.append(cost)
         diffs.append(diff)
         centers.append(center)
@@ -271,6 +354,7 @@ def do_test_coeffs(
     with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
         np.savez(
             f,
+            xis=np.asarray(xis),
             range_var=np.asarray(range_var),
             costs=np.asarray(costs),
             diffs=np.asarray(diffs),
@@ -297,39 +381,39 @@ def do_test_coeffs(
 # if rank == (0 % size):
 #     do_test("num_datapoints", np.logspace(6, 9, 20).astype(int))
 # elif rank == (1 % size):
-#     do_test("kl_reg", np.logspace(-10, 0, 20))
+#     do_test("kl_reg", np.logspace(-10, 1, 20))
 # elif rank == (2 % size):
 #     do_test("dt", np.logspace(-5, -1.5, 10))
 # elif rank == (3 % size):
-#     do_test("num_bins", np.logspace(1, 4, 20).astype(int))
+#     do_test("num_bins", np.logspace(1, 3, 20).astype(int))
 # elif rank == (4 % size):
 #     do_test("ep0", np.logspace(-7, 0, 20))
 # elif rank == (5 % size):
 #     do_test("ep1", np.logspace(-7, 0, 20))
 # elif rank == (6 % size):
-#     do_test_coeffs("ax", 1, np.linspace(-3, 3, 20), logx=False)
+#     default = -0.016
+#     pm = 0.1
+#     do_test_coeffs("ax", 1, np.linspace(default - pm, default + pm, 20), logx=False)
 # elif rank == (7 % size):
-#     do_test_coeffs("bx3", 3, np.linspace(-3, 3, 20), logx=False)
+#     default = 1.35
+#     p = 2.0
+#     m = 1.35
+#     do_test_coeffs("bx3", 3, np.linspace(default - m, default + p, 20), logx=False)
 # elif rank == (8 % size):
-#     do_test_coeffs("cx4", 4, np.linspace(-1, -0.01, 20, endpoint=False), logx=False)
+#     default = -1
+#     p = 0.9
+#     m = 1
+#     do_test_coeffs(
+#         "cx4", 4, np.linspace(default - m, default + p, 20, endpoint=False), logx=False
+#     )
 # else:
 #     print("Over extended:", rank, size, flush=True)
 
-# range_var = np.logspace(6, 9, 20).astype(int)
-# do_plot("num_datapoints", range_var, *do_load("num_datapoints"))
-range_var = np.logspace(-10, 0, 20)
-do_plot("kl_reg", range_var, *do_load("kl_reg"))
-range_var = np.logspace(-5, -1.5, 10)
-do_plot("dt", range_var, *do_load("dt"))
-# range_var = np.logspace(1, 4, 20).astype(int)
-# do_plot("num_bins", range_var, *do_load("num_bins"))
-range_var = np.logspace(-7, 0, 20)
-do_plot("ep0", range_var, *do_load("ep0"))
-range_var = np.logspace(-7, 0, 20)
-do_plot("ep1", range_var, *do_load("ep1"))
-range_var = np.linspace(-3, 3, 20)
-do_plot("ax", range_var, *do_load("ax"), logx=False)
-range_var = np.linspace(-3, 3, 20)
-do_plot("bx3", range_var, *do_load("bx3"), logx=False)
-range_var = np.linspace(-1, -0.01, 20, endpoint=False)
-do_plot("cx4", range_var, *do_load("cx4"), logx=False)
+# do_test("dt", np.logspace(-3, -2.2, 10), target_name="dt zoom")
+
+import os
+
+NUM_CPUS = int(os.environ.get("SLURM_NTASKS_PER_NODE", default=1))
+do_test_parallel(
+    "dt", np.logspace(-4, -1, 30), target_name="dt zoom", POOLSIZE=NUM_CPUS
+)
