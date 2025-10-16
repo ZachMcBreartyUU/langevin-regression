@@ -23,7 +23,8 @@ from utils import (
     SteadyFP,
 )
 
-SCRATCH_PATH = Path(f"/scratch/seismology/zach/softglass/fixed_model")
+from fixed_model_plotting import do_plot, do_load, SCRATCH_PATH
+
 # SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
 
 
@@ -290,93 +291,6 @@ def do_test_coeffs(
     )
 
     print(f"{target_name}, finished at {time() - start}", flush=True)
-
-
-def do_plot(
-    target_var,
-    range_var,
-    costs,
-    diffs,
-    centers,
-    pdfs,
-    found_pdfs,
-    logx=True,
-    coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
-    ONLYLABEL=5,
-):
-    fig_cost, ax_cost = plt.subplots()
-    fig_diff, axes_diff = plt.subplots(len(diffs), figsize=(6, len(diffs) * 3))
-    fig_pdfs, ax_pdfs = plt.subplots()
-    fig_found_pdfs, ax_found_pdfs = plt.subplots()
-    if logx:
-        ax_cost.semilogx(range_var, costs)
-        for diff, ax_diff in zip(diffs, axes_diff):
-            ax_diff.semilogx(range_var, diff)
-    else:
-        ax_cost.plot(range_var, costs)
-        for diff, ax_diff in zip(diffs, axes_diff):
-            ax_diff.plot(range_var, diff)
-    ax_cost.set_xlabel(f"{target_var}")
-    ax_cost.set_ylabel("Cost / misfit, V")
-    for ax_diff, coeff_lab in zip(axes_diff, coeff_labels):
-        ax_diff.set_xlabel(f"{target_var}")
-        ax_diff.set_title(
-            rf"Absolute difference, $\left|\Delta\xi_{'{'}{coeff_lab}{'}'}\right / \xi_{'{true}'}|$"
-        )
-    colours = getattr(plt.cm, "jet")(np.linspace(0.1, 0.9, len(pdfs)))
-    for center, pdf, colour in zip(centers, pdfs, colours):
-        ax_pdfs.plot(center, pdf, color=colour)
-    q = plt.cm.ScalarMappable(None, "jet")
-    if logx:
-        q.set_clim(np.log10(range_var[0]), np.log10(range_var[-1]))
-        ticks = np.log10(range_var)
-        label = f"log {target_var}"
-    else:
-        q.set_clim(range_var[0], range_var[-1])
-        ticks = range_var
-        label = f"{target_var}"
-
-    fig_pdfs.colorbar(q, ax=ax_pdfs, ticks=ticks, label=label)
-
-    ax_pdfs.set_xlabel("x")
-    ax_pdfs.set_ylabel("pdf(x)")
-
-    for center, found_pdf, colour in zip(centers, found_pdfs, colours):
-        ax_found_pdfs.plot(center, found_pdf, color=colour)
-    fig_found_pdfs.colorbar(q, ax=ax_found_pdfs, ticks=ticks, label=label)
-    ax_found_pdfs.set_xlabel("x")
-    ax_found_pdfs.set_ylabel("pdf(x)")
-
-    fig_cost.tight_layout()
-    fig_diff.tight_layout()
-    fig_pdfs.tight_layout()
-    fig_found_pdfs.tight_layout()
-    fig_cost.savefig(SCRATCH_PATH / f"cost_vs_{target_var}.png")
-    fig_diff.savefig(SCRATCH_PATH / f"diff_vs_{target_var}.png")
-    fig_pdfs.savefig(SCRATCH_PATH / f"pdf_vs_{target_var}.png")
-    fig_found_pdfs.savefig(SCRATCH_PATH / f"found_pdf_vs_{target_var}.png")
-    plt.close(fig_cost)
-    plt.close(fig_diff)
-    plt.close(fig_pdfs)
-    plt.close(fig_found_pdfs)
-
-
-def do_load(target_var):
-    with np.load(SCRATCH_PATH / f"test_{target_var}.npz") as f:
-        # range_var = f["range_var"]
-        costs = f["costs"]
-        diffs = f["diffs"]
-        centers = f["centers"]
-        pdfs = f["pdfs"]
-        found_pdfs = f["found_pdfs"]
-    return (
-        # range_var,
-        costs,
-        diffs,
-        centers,
-        pdfs,
-        found_pdfs,
-    )
 
 
 # ### program splits
