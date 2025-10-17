@@ -174,17 +174,6 @@ def run_fixed_model(
 def run_fixed_model_dict(dict_):
     return run_fixed_model(True, False, **dict_)
 
-
-from mpi4py import MPI
-
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
-
-seed = 987654321
-start = time()
-
-
 # TODO: implement repetition?
 def do_test(
     target_var,
@@ -377,6 +366,14 @@ def do_test_coeffs(
     print(f"{target_name}, finished at {time() - start}", flush=True)
 
 
+from mpi4py import MPI
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
+seed = 987654321
+start = time()
 # ### program splits
 # if rank == (0 % size):
 #     do_test("num_datapoints", np.logspace(6, 9, 20).astype(int))
