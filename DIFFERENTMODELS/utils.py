@@ -1,5 +1,4 @@
 ### Utility functions for the various models, modifified from LR's original utils
-import sys
 from typing import Optional
 from time import time
 from functools import reduce, partial
@@ -84,11 +83,6 @@ def cost_KL(Xi, params):
 
     sfp_pdf = sfp.solve(A_vals, C_vals)
     KL_val = max(kl_divergence(data_pdf, sfp_pdf, sfp.dx, tol=1e-6), 0.0) * kl_reg
-    # TEMP TESTING
-    if KL_val == 0:
-        print("GOT NEGATIVE KL VAL", file=sys.stderr)
-        print("A_KM:", A_KM, file=sys.stderr)
-        print("C_KM:", C_KM, file=sys.stderr)
 
     # Penalise an equation with non-negative coefficient on largest term
     if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
