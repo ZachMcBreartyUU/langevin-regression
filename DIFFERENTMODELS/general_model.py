@@ -16,6 +16,7 @@ from jitcsde import jitcsde, y
 from kramersmoyal import km
 
 from utils import (
+    cost,
     cost_KL,
     optimise_function,
     sindy_model,
@@ -178,7 +179,11 @@ def run_sindy_model(
     }
 
     # opt_func = lambda params: optimise_function(cost_KL, params)
-    opt_func = partial(optimise_function, cost_KL)
+    if kl_reg > 0:
+        opt_func = partial(optimise_function, cost_KL)
+    else:
+        opt_func = partial(optimise_function, cost)
+
     if PARALLEL:
         Xi, costs, active_history = SSR_loop_parallel(opt_func, params)
     else:
