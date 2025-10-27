@@ -43,6 +43,7 @@ def run_sindy_model(
     coeffs=[0.0, -1.0, 0.0, 1.0],
     x0=0.0,
     folderpath: Path = SCRATCH_PATH,
+    param="x",
 ):
     folderpath = folderpath / MODEL_NAME
     folderpath.mkdir(exist_ok=True, parents=True)
@@ -74,7 +75,7 @@ def run_sindy_model(
 
     fig_data, ax_data = plt.subplots()
     ax_data.plot(times, x_data)
-    ax_data.set_ylabel("$x(t)$")
+    ax_data.set_ylabel(f"${param}(t)$")
     ax_data.set_xlabel("$t$")
 
     fig_data.tight_layout()
@@ -98,8 +99,9 @@ def run_sindy_model(
     ## Plot pdf and moments
     fig_pdf, ax_pdf = plt.subplots()
     ax_pdf.plot(centers_x, pdf)
-    ax_pdf.set_ylabel("PDF($x$)")
-    ax_pdf.set_xlabel("$x$")
+    ax_pdf.set_ylabel(f"PDF(${param}$)")
+    ax_pdf.set_xlabel(f"${param}$")
+    fig_pdf.tight_layout()
     fig_pdf.savefig(folderpath / f"{MODEL_NAME}_pdf.png")
     plt.close(fig_pdf)
 
@@ -107,11 +109,11 @@ def run_sindy_model(
     ax_A: Axes
     ax_C: Axes
     ax_A.plot(centers_x, moment_1)
-    ax_A.set_xlabel("x")
-    ax_A.set_ylabel("First moment, A(x)")
+    ax_A.set_xlabel(f"${param}$")
+    ax_A.set_ylabel(f"First moment, A(${param}$)")
     ax_C.plot(centers_x, moment_2)
-    ax_C.set_xlabel("x")
-    ax_C.set_ylabel("Second moment, C(x)")
+    ax_C.set_xlabel(f"${param}$")
+    ax_C.set_ylabel(f"Second moment, C(${param}$)")
     fig_moments.savefig(folderpath / f"{MODEL_NAME}_moments.png")
     plt.close(fig_moments)
 
@@ -243,10 +245,12 @@ def run_sindy_model(
         # The logging happened when the model was being chosen
         ax_cost.set_ylabel(r"log Cost, $\log V$")
         ax_dcost.set_ylabel(r"dlog Cost, $d\log V$")
+        fig_cost.tight_layout()
         fig_cost.savefig(folderpath / f"{MODEL_NAME}_SSR_logcost.png")
     else:
         ax_cost.set_ylabel("Cost, $V$")
         ax_dcost.set_ylabel("dCost, $dV$")
+        fig_cost.tight_layout()
         fig_cost.savefig(folderpath / f"{MODEL_NAME}_SSR_cost.png")
     plt.close(fig_cost)
 
@@ -273,6 +277,7 @@ def run_sindy_model(
     ax_history.set_xlabel("Sparsity")
     ax_history.set_ylabel("Active terms")
 
+    fig_history.tight_layout()
     fig_history.savefig(folderpath / f"{MODEL_NAME}_SSR_sparsity.png")
     plt.close(fig_history)
 
@@ -285,9 +290,10 @@ def run_sindy_model(
 
     ax_pdf_comp.plot(centers_x, pdf_normed, label="Data")
     ax_pdf_comp.plot(centers_x, pdf_sindy_normed, label="SINDy")
-    ax_pdf_comp.set_ylabel("PDF($x$)")
-    ax_pdf_comp.set_xlabel("$x$")
+    ax_pdf_comp.set_ylabel(f"PDF(${param}$)")
+    ax_pdf_comp.set_xlabel(f"${param}$")
     ax_pdf_comp.legend()
+    fig_pdf_comp.tight_layout()
     fig_pdf_comp.savefig(folderpath / f"{MODEL_NAME}_pdf_comparison.png")
     plt.close(fig_pdf_comp)
 
@@ -297,17 +303,22 @@ def run_sindy_model(
     ax_C_comp: Axes
     ax_A_comp.scatter(centers_x, moment_1, marker="x", label="KM")
     ax_A_comp.plot(centers_x, A_sindy, "r", label="Found model")
-    ax_A_comp.set_xlabel("x")
-    ax_A_comp.set_ylabel("First moment, A(x)")
+    ax_A_comp.set_xlabel(r"${param}$")
+    ax_A_comp.set_ylabel(r"First moment, A(${param}$)")
     ax_C_comp.scatter(centers_x, moment_2, marker="x", label="KM")
     ax_C_comp.plot(centers_x, C_sindy, "r", label="Found model")
-    ax_C_comp.set_xlabel("x")
-    ax_C_comp.set_ylabel("Second moment, C(x)")
+    ax_C_comp.set_xlabel(f"${param}$")
+    ax_C_comp.set_ylabel(f"Second moment, C(${param}$)")
 
     ax_A_comp.legend()
-    ax_C_comp.legend()
+    # ax_C_comp.legend()
 
+    fig_moments_comp.tight_layout()
     fig_moments_comp.savefig(folderpath / f"{MODEL_NAME}_moments_comparison.png")
+
+    ax_A_comp.set_ylim(-0.4, 0.4)
+    fig_moments_comp.savefig(folderpath / f"{MODEL_NAME}_moments_comparison_yzoom.png")
+
     plt.close(fig_moments_comp)
 
     ## Directly compare True answer to Found answer
@@ -400,4 +411,5 @@ if __name__ == "__main__":
         ep1,
         coeffs,
         x0,
+        param=r"\phi",
     )
