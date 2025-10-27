@@ -28,6 +28,7 @@ from utils_parallel import SSR_loop_parallel
 
 SCRATCH_PATH = Path(f"/scratch/seismology/zach/softglass/")
 
+
 def run_sindy_model(
     MODEL_NAME,
     LOG_COST=False,
@@ -82,7 +83,15 @@ def run_sindy_model(
     fig_data.tight_layout()
     fig_data.savefig(folderpath / f"{MODEL_NAME}_data.png")
 
-    ax_data.set_xlim(0, 1000)
+    plt.close(fig_data)
+    
+    fig_data, ax_data = plt.subplots()
+    lmt = int(1000 / dt)
+    ax_data.plot(times[:lmt], x_data[:lmt])
+    ax_data.set_ylabel(f"${param}(t)$")
+    ax_data.set_xlabel("$t$")
+
+    fig_data.tight_layout()
     fig_data.savefig(folderpath / f"{MODEL_NAME}_data_zoom.png")
     plt.close(fig_data)
 
