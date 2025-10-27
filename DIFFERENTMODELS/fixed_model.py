@@ -171,7 +171,12 @@ def run_fixed_model(
 
 
 def run_fixed_model_dict(dict_):
-    return run_fixed_model(True, False, **dict_)
+    start = time()
+    print(f"Model: {dict_} started", flush=True)
+    ret = run_fixed_model(True, False, **dict_)
+    print(f"Model: {dict_} finished, elapsed={time() - start}", flush=True)
+    return ret
+
 
 # TODO: implement repetition?
 def do_test(
