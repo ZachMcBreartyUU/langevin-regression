@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.stats import gaussian_kde
 
-SCRATCH_PATH = Path("/scratch/seismology/zach/")
+SCRATCH_PATH = Path("/scratch/seismology/zach/softglass")
 
 
 def get_data(folder_path, start=None, stop=None, step=None, memmap=True):
