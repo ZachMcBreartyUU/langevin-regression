@@ -95,6 +95,12 @@ def run_sindy_model(
     fig_data.savefig(folderpath / f"{MODEL_NAME}_data_zoom.png")
     plt.close(fig_data)
 
+    ## Duplicate the data
+    if EVEN_ABS:
+        # When we make all even terms odd (by including the abs) then
+        # We are assuming symmetry in x, so put this symmetry in the dataset
+        x_data = np.append(x_data, -x_data)
+
     ## Perform Kramers Moyal
     edges = np.linspace(np.min(x_data), np.max(x_data), num_bins + 1)
     # edges = np.linspace(-0.005, 0.005, num_bins + 1)
