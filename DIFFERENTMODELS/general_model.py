@@ -47,6 +47,7 @@ def run_sindy_model(
     folderpath: Path = SCRATCH_PATH,
     param="x",
 ):
+    ADD_TERMS = 0  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
     folderpath = folderpath / MODEL_NAME
     folderpath.mkdir(exist_ok=True, parents=True)
     times = np.arange(0, num_datapoints) * dt
@@ -136,17 +137,16 @@ def run_sindy_model(
     ## Make SINDy libraries
     x_sym = sympy.symbols("x")
 
-    # 3 additional terms greater than the largest coefficient is somewhat arbitrary
     if EVEN_ABS:
         arr = []
-        for i in range(len(coeffs) + 3):
+        for i in range(len(coeffs) + ADD_TERMS):
             if i % 2 == 0 and i != 0:
                 arr.append(x_sym ** (i - 1) * symengine.Abs(x_sym))
             else:
                 arr.append(x_sym**i)
         A_lib_expr = np.array(arr)
     else:
-        A_lib_expr = np.array([x_sym**i for i in range(len(coeffs) + 3)])
+        A_lib_expr = np.array([x_sym**i for i in range(len(coeffs) + ADD_TERMS)])
     print(f"{A_lib_expr=}")
     num_A_expr = len(A_lib_expr)
 
@@ -155,7 +155,7 @@ def run_sindy_model(
         lamb_expr = sympy.lambdify(x_sym, A_lib_expr[k])
         lib_A[k] = lamb_expr(centers_x)
 
-    C_lib_expr = np.array([x_sym**i for i in range(5)])
+    C_lib_expr = np.array([x_sym**i for i in range(3 + ADD_TERMS)])
     print(f"{C_lib_expr=}")
     num_C_expr = len(C_lib_expr)
 
@@ -345,9 +345,7 @@ def run_sindy_model(
 
     ## Directly compare True answer to Found answer
     true_model_xi = np.zeros(n_terms)
-    # encoding dx = (-x + x^3 - x^5/6)dt + sqrt(ep0 + ep1 x^2)dw
-    # this assumes that the models only contain integer powers of x in ascending order
-    true_model_xi[: num_A_expr - 3] = np.array(coeffs)
+    true_model_xi[: num_A_expr - ADD_TERMS] = np.array(coeffs)
     true_model_xi[num_A_expr + 0] = ep0
     true_model_xi[num_A_expr + 2] = ep1
 
