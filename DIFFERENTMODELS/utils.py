@@ -147,13 +147,16 @@ def SSR_loop(opt_fun, params):
 
             # Break off masks for drift/diffusion
             f_active = tmp_active[tmp_active < len(A_expr)]
+            final_active = f_active[-1]
             a_active = tmp_active[tmp_active >= len(A_expr)] - len(A_expr)
 
             params["A_expr"] = A_expr[f_active]
             params["C_expr"] = C_expr[a_active]
             params["lib_A"] = lib_A[f_active]
             params["lib_C"] = lib_C[a_active]
-            params["Xi0"] = Xi0[tmp_active]
+            tmp_xi0 = Xi0[tmp_active]
+            tmp_xi0[final_active] = -abs(tmp_xi0[final_active])
+            params["Xi0"] = tmp_xi0
 
             # Ensure that there is at least one drift and diffusion term left
             if len(a_active) > 0 and len(f_active) > 0:
