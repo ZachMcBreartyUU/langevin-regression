@@ -66,6 +66,22 @@ if args.plot_intermediate:
 
     fig.savefig(folder_path / "system_graph_just_phi.png")
 
+    fig, (ax, ax2) = plt.subplots(2)
+    # type checking for ax, though matplotlib technically
+    # doesn't export Axes, so include the type ignore
+    ax: plt.Axes  # type: ignore
+    ax2: plt.Axes  # type: ignore
+    ax.plot(times[:10000], phi[:10000])
+    ax.set_xlabel("$t$")
+    ax.set_ylabel(r"Phi, $\phi$")
+
+    ax2.plot(times[:10000], sigma[:10000])
+    ax2.set_xlabel("$t$")
+    ax2.set_ylabel(r"Stress, $\sigma$")
+
+    fig.tight_layout()
+    fig.savefig(folder_path / "system_graph_just_phi_zoom.png")
+
 
 def _km_find_range(data: np.ndarray, pdf_cutoff: float, N: int = 100) -> np.ndarray:
     """data: data to find the pdf range for
@@ -115,28 +131,31 @@ del times, phi, sigma  # large arrays which are no longer needed
 N = len(centers)  # == args.num_bins
 
 if args.plot_intermediate:
-    fig, axes = plt.subplots(3, figsize=(12, 12))
-    axes: list[plt.Axes]  # type: ignore
-    axes[0].plot(centers, pdf, label=rf"$\tau={dt}$")
-    axes[0].set_ylabel(r"PDF($\phi$)")
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.plot(centers, pdf)
+    ax.set_ylabel(r"PDF($\phi$)")
+    ax.set_xlabel(r"Phi, $\phi$")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(folder_path / "pdf_just_phi.png")
+
+    fig, axes = plt.subplots(2, figsize=(12, 8))
+
+    axes[0].plot(centers, f_KM, label=rf"$\tau={dt}$")
+    axes[0].plot(centers, f(centers, sigma_avg), label="$A(f)$")
+    axes[0].set_ylabel(r"First moment, $m^{(1)}(\phi)$")
     axes[0].set_xlabel(r"Phi, $\phi$")
     axes[0].legend()
 
-    axes[1].plot(centers, f_KM, label=rf"$\tau={dt}$")
-    axes[1].plot(centers, f(centers, sigma_avg), label="$A(f)$")
-    axes[1].set_ylabel(r"First moment, $m^{(1)}(\phi)$")
+    axes[1].plot(centers, a_KM, label=rf"$\tau={dt}$")
+    axes[1].plot(centers, g(centers, sigma_avg) ** 2 / 2, label="$B(f)^2/2$")
+    axes[1].set_ylabel(r"Second moment, $m^{(2)}(\phi)$")
     axes[1].set_xlabel(r"Phi, $\phi$")
     axes[1].legend()
 
-    axes[2].plot(centers, a_KM, label=rf"$\tau={dt}$")
-    axes[2].plot(centers, g(centers, sigma_avg) ** 2 / 2, label="$B(f)^2/2$")
-    axes[2].set_ylabel(r"Second moment, $m^{(2)}(\phi)$")
-    axes[2].set_xlabel(r"Phi, $\phi$")
-    axes[2].legend()
-
     fig.tight_layout()
 
-    fig.savefig(folder_path / "pdf_moments_just_phi.png")
+    fig.savefig(folder_path / "moments_just_phi.png")
 
 ### Build SINDy libraries with sympy
 phi_sym = sympy.symbols("phi")
@@ -323,7 +342,7 @@ if q is None:
     raise RuntimeError("Failed to solve adjoint focker planck system")
 f_tau, a_tau = q
 
-fig, (ax, ax2) = plt.subplots(ncols=2, figsize=(12, 6))
+fig, (ax, ax2) = plt.subplots(ncols=2, figsize=(12, 8))
 ax: plt.Axes  # type: ignore
 ax2: plt.Axes  # type: ignore
 ax.plot(centers, f(centers, sigma_avg), c="gray", lw=2, label="True drift")

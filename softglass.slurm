@@ -3,10 +3,10 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --threads-per-core=1
 #SBATCH --nodes=1
-#SBATCH --out="/scratch/seismology/zach/runs_EqnLearning/LangevinRegression-%j.out"
-#SBATCH --error="/scratch/seismology/zach/runs_EqnLearning/LangevinRegression-%j.err"
+#SBATCH --out="/scratch/seismology/zach/softglass/LangevinRegression-%j.out"
+#SBATCH --error="/scratch/seismology/zach/softglass/LangevinRegression-%j.err"
 #SBATCH --job-name LangevinP
-#SBATCH --exclusive
+# # SBATCH --exclusive
 
 module purge
 
