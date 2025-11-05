@@ -35,7 +35,7 @@ def run_sindy_model(
     LARGEST_JUMP=False,
     EVEN_ABS=False,
     PARALLEL=False,
-    PDF_WEIGHTS=False,
+    ERROR_WEIGHTS=False,
     dt=0.001,
     num_datapoints=10_000_000,
     num_bins=100,
@@ -84,7 +84,7 @@ def run_sindy_model(
     fig_data.savefig(folderpath / f"{MODEL_NAME}_data.png")
 
     plt.close(fig_data)
-    
+
     fig_data, ax_data = plt.subplots()
     lmt = int(1000 / dt)
     ax_data.plot(times[:lmt], x_data[:lmt])
@@ -171,11 +171,14 @@ def run_sindy_model(
     Xi0[:num_A_expr] = lstsq(lib_A.T, moment_1)[0]
     Xi0[num_A_expr:] = lstsq(lib_C.T, moment_2)[0]
     print(f"{Xi0=}")
-    if PDF_WEIGHTS:
-        weight = pdf
+    if ERROR_WEIGHTS:
+        first_weight = pdf
+        second_weight = pdf / moment_2
+        second_weight /= np.sum(second_weight)
     else:
-        weight = np.ones_like(pdf)
-    weights = np.array([weight, weight])
+        first_weight = np.ones_like(pdf)
+        second_weight = np.ones_like(pdf)
+    weights = np.array([first_weight, second_weight])
 
     sfp = SteadyFP(num_bins, centers_x[1] - centers_x[0])
 
@@ -193,7 +196,6 @@ def run_sindy_model(
         "kl_reg": kl_reg,
     }
 
-    # opt_func = lambda params: optimise_function(cost_KL, params)
     if kl_reg > 0:
         opt_func = partial(optimise_function, cost_KL)
     else:
@@ -383,7 +385,7 @@ if __name__ == "__main__":
     df.add_argument("--LOG_COST", action="store_true")
     df.add_argument("--LARGEST_JUMP", action="store_true")
     df.add_argument("--PARALLEL", action="store_true")
-    df.add_argument("--PDF_WEIGHTS", action="store_true")
+    df.add_argument("--ERROR_WEIGHTS", action="store_true")
     df.add_argument("-dt", "--timestep", type=float, default=0.001)
     df.add_argument("-N", "--num-steps", type=int, default=10_000_000)
     df.add_argument("-B", "--num-bins", type=int, default=100)
@@ -400,12 +402,12 @@ if __name__ == "__main__":
     args = df.parse_args()
     print(args)
 
-    MODEL_NAME = args.MODEL_NAME  # "pitchfork_higher_order"
+    MODEL_NAME = args.MODEL_NAME
     LOG_COST = args.LOG_COST
     LARGEST_JUMP = args.LARGEST_JUMP
     EVEN_ABS = args.EVEN_ABS
     PARALLEL = args.PARALLEL
-    PDF_WEIGHTS = args.PDF_WEIGHTS
+    ERROR_WEIGHTS = args.ERROR_WEIGHTS
     dt = args.timestep
     num_datapoints = args.num_steps
     num_bins = args.num_bins
@@ -422,7 +424,7 @@ if __name__ == "__main__":
         LARGEST_JUMP,
         EVEN_ABS,
         PARALLEL,
-        PDF_WEIGHTS,
+        ERROR_WEIGHTS,
         dt,
         num_datapoints,
         num_bins,
