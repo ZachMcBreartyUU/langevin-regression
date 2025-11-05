@@ -325,8 +325,8 @@ def run_sindy_model(
     ax_C_comp: Axes
     ax_A_comp.scatter(centers_x, moment_1, marker="x", label="KM")
     ax_A_comp.plot(centers_x, A_sindy, "r", label="Found model")
-    ax_A_comp.set_xlabel(r"${param}$")
-    ax_A_comp.set_ylabel(r"First moment, A(${param}$)")
+    ax_A_comp.set_xlabel(f"${param}$")
+    ax_A_comp.set_ylabel(f"First moment, A(${param}$)")
     ax_C_comp.scatter(centers_x, moment_2, marker="x", label="KM")
     ax_C_comp.plot(centers_x, C_sindy, "r", label="Found model")
     ax_C_comp.set_xlabel(f"${param}$")
