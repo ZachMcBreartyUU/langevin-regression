@@ -1,5 +1,6 @@
 from pathlib import Path
 from functools import partial
+import json
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -403,68 +404,9 @@ def run_sindy_model_LASSO(
     ADD_TERMS = 0  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
     folderpath = folderpath / MODEL_NAME
     folderpath.mkdir(exist_ok=True, parents=True)
-    times = np.arange(0, num_datapoints) * dt
-
-    ## Define model: dx = A(x)dt + B(x)dw; C(x) = B^2 / 2
-    # Higher order Pitchfork with multiplicative noise
-    x = y(0)
-    A = 0
-    if EVEN_ABS:
-        for i in range(len(coeffs)):
-            if i % 2 == 0 and i != 0:
-                A += x ** (i - 1) * symengine.Abs(x) * coeffs[i]
-            else:
-                A += x**i * coeffs[i]
-    else:
-        for i in range(len(coeffs)):
-            A += x**i * coeffs[i]
-    A = [A]
-    B = [symengine.sqrt(ep0 + ep1 * x**2)]
-
-    ## Integrate model
-    SDE = jitcsde(A, B, n=1, additive=False)
-    SDE.set_initial_value([x0])
-    x_data = np.fromiter(
-        (SDE.integrate(t)[0] for t in times), dtype=float, count=num_datapoints
+    _, centers_x, pdf, moment_1, moment_2 = get_model(
+        folderpath, num_datapoints, dt, EVEN_ABS, coeffs, ep0, ep1, x0
     )
-    assert x_data.shape == (num_datapoints,)
-
-    fig_data, ax_data = plt.subplots()
-    ax_data.plot(times, x_data)
-    ax_data.set_ylabel(f"${param}(t)$")
-    ax_data.set_xlabel("$t$")
-
-    fig_data.tight_layout()
-    fig_data.savefig(folderpath / f"{MODEL_NAME}_data.png")
-
-    plt.close(fig_data)
-
-    fig_data, ax_data = plt.subplots()
-    lmt = int(1000 / dt)
-    ax_data.plot(times[:lmt], x_data[:lmt])
-    ax_data.set_ylabel(f"${param}(t)$")
-    ax_data.set_xlabel("$t$")
-
-    fig_data.tight_layout()
-    fig_data.savefig(folderpath / f"{MODEL_NAME}_data_zoom.png")
-    plt.close(fig_data)
-
-    ## Duplicate the data
-    if EVEN_ABS:
-        # When we make all even terms odd (by including the abs) then
-        # We are assuming symmetry in x, so put this symmetry in the dataset
-        x_data = np.append(x_data, -x_data)
-
-    ## Perform Kramers Moyal
-    edges = np.linspace(np.min(x_data), np.max(x_data), num_bins + 1)
-    # edges = np.linspace(-0.005, 0.005, num_bins + 1)
-    kmc, centers = km(x_data[..., None], bins=(edges,), powers=2)  # type: ignore
-    pdf, moment_1, moment_2 = kmc
-    centers_x = centers[0]
-    pdf /= np.nansum(pdf)
-    moment_1 /= dt
-    moment_2 /= dt
-    del x_data
 
     ## Plot pdf and moments
     fig_pdf, ax_pdf = plt.subplots()
@@ -627,6 +569,163 @@ def run_sindy_model_LASSO(
     fig_moments_comp.savefig(folderpath / f"{MODEL_NAME}_moments_comparison_yzoom.png")
 
     plt.close(fig_moments_comp)
+
+
+def _check_metadata(metadata, num_datapoints, dt, EVEN_ABS, coeffs, ep0, ep1, x0):
+    return (
+        metadata["num_datapoints"] == num_datapoints
+        and metadata["dt"] == dt
+        and metadata["EVEN_ABS"] == EVEN_ABS
+        and metadata["coeffs"] == coeffs
+        and metadata["ep0"] == ep0
+        and metadata["ep1"] == ep1
+        and metadata["x0"] == x0
+    )
+
+
+def _process_dataset(times, x_data):
+    ## Perform Kramers Moyal
+    edges = np.linspace(np.min(x_data), np.max(x_data), num_bins + 1)
+    # edges = np.linspace(-0.005, 0.005, num_bins + 1)
+    kmc, centers = km(x_data[..., None], bins=(edges,), powers=2)  # type: ignore
+    pdf, moment_1, moment_2 = kmc
+    centers = centers[0]
+    pdf /= np.nansum(pdf)
+    moment_1 /= dt
+    moment_2 /= dt
+    return edges, centers, pdf, moment_1, moment_2
+
+
+def get_model(
+    folderpath: Path,
+    num_datapoints,
+    dt,
+    EVEN_ABS,
+    coeffs,
+    ep0,
+    ep1,
+    x0,
+    SAVE_MODEL=True,
+    param="x",
+):
+    parent_model_path = folderpath.parent / "MODEL"
+
+    if (parent_model_path / "metadata.json").exists():
+        # check metadata matches
+        with open(parent_model_path / "metadata.json") as metadata_file:
+            metadata = json.load(metadata_file)
+        if _check_metadata(
+            metadata, num_datapoints, dt, EVEN_ABS, coeffs, ep0, ep1, x0
+        ):
+            if (parent_model_path / "km_model.npz").exists():
+                print("Found premade model, skipping data generation", flush=True)
+                with np.load(parent_model_path / "km_model.npz") as kramers_file:
+                    edges = kramers_file["edges"]
+                    centers = kramers_file["centers"]
+                    pdf = kramers_file["pdf"]
+                    moment_1 = kramers_file["moment_1"]
+                    moment_2 = kramers_file["moment_2"]
+                return edges, centers, pdf, moment_1, moment_2
+            elif (parent_model_path / "timeseries.npz").exists():
+                print("Found timeseries dataset, processing", flush=True)
+                # Process data set, then save model, then return model
+                with np.load(parent_model_path / "timeseries.npz") as datafile:
+                    times = datafile["times"]
+                    x_data = datafile["x_data"]
+
+                edges, centers, pdf, moment_1, moment_2 = _process_dataset(
+                    times, x_data
+                )
+                if SAVE_MODEL:
+                    np.savez(
+                        parent_model_path / "km_model.npz",
+                        edges=edges,
+                        centers=centers,
+                        pdf=pdf,
+                        moment_1=moment_1,
+                        moment_2=moment_2,
+                    )
+                return edges, centers, pdf, moment_1, moment_2
+    print("No premade model or dataset found, generating and processing", flush=True)
+    # No or incorrect metadata, or no model or dataset
+    # so generate the model
+    times = np.arange(0, num_datapoints) * dt
+    x = y(0)
+    A = 0
+    if EVEN_ABS:
+        for i in range(len(coeffs)):
+            if i % 2 == 0 and i != 0:
+                A += x ** (i - 1) * symengine.Abs(x) * coeffs[i]
+            else:
+                A += x**i * coeffs[i]
+    else:
+        for i in range(len(coeffs)):
+            A += x**i * coeffs[i]
+    A = [A]
+    B = [symengine.sqrt(ep0 + ep1 * x**2)]
+
+    ## Integrate model
+    SDE = jitcsde(A, B, n=1, additive=False)
+    SDE.set_initial_value([x0])
+    x_data = np.fromiter(
+        (SDE.integrate(t)[0] for t in times), dtype=float, count=num_datapoints
+    )
+    assert x_data.shape == (num_datapoints,)
+
+    if SAVE_MODEL:
+        (parent_model_path).mkdir(exist_ok=True, parents=True)
+        metadata = {
+            "num_datapoints": num_datapoints,
+            "dt": dt,
+            "EVEN_ABS": EVEN_ABS,
+            "coeffs": coeffs,
+            "ep0": ep0,
+            "ep1": ep1,
+            "x0": x0,
+        }
+        with open(parent_model_path / "metadata.json", "w") as f:
+            json.dump(metadata, f)
+
+        np.savez(parent_model_path / "timeseries.npz", times=times, x_data=x_data)
+
+    fig_data, ax_data = plt.subplots()
+    ax_data.plot(times, x_data)
+    ax_data.set_ylabel(f"${param}(t)$")
+    ax_data.set_xlabel("$t$")
+
+    fig_data.tight_layout()
+    fig_data.savefig(folderpath / f"{MODEL_NAME}_data.png")
+
+    plt.close(fig_data)
+
+    fig_data, ax_data = plt.subplots()
+    lmt = int(1000 / dt)
+    ax_data.plot(times[:lmt], x_data[:lmt])
+    ax_data.set_ylabel(f"${param}(t)$")
+    ax_data.set_xlabel("$t$")
+
+    fig_data.tight_layout()
+    fig_data.savefig(folderpath / f"{MODEL_NAME}_data_zoom.png")
+    plt.close(fig_data)
+
+    ## Duplicate the data
+    if EVEN_ABS:
+        # When we make all even terms odd (by including the abs) then
+        # We are assuming symmetry in x, so put this symmetry in the dataset
+        x_data = np.append(x_data, -x_data)
+
+    edges, centers, pdf, moment_1, moment_2 = _process_dataset(times, x_data)
+
+    if SAVE_MODEL:
+        np.savez(
+            parent_model_path / "km_model.npz",
+            edges=edges,
+            centers=centers,
+            pdf=pdf,
+            moment_1=moment_1,
+            moment_2=moment_2,
+        )
+    return edges, centers, pdf, moment_1, moment_2
 
 
 if __name__ == "__main__":
