@@ -61,68 +61,9 @@ def run_sindy_model(
     ADD_TERMS = 0  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
     folderpath = folderpath / MODEL_NAME
     folderpath.mkdir(exist_ok=True, parents=True)
-    times = np.arange(0, num_datapoints) * dt
-
-    ## Define model: dx = A(x)dt + B(x)dw; C(x) = B^2 / 2
-    # Higher order Pitchfork with multiplicative noise
-    x = y(0)
-    A = 0
-    if EVEN_ABS:
-        for i in range(len(coeffs)):
-            if i % 2 == 0 and i != 0:
-                A += x ** (i - 1) * symengine.Abs(x) * coeffs[i]
-            else:
-                A += x**i * coeffs[i]
-    else:
-        for i in range(len(coeffs)):
-            A += x**i * coeffs[i]
-    A = [A]
-    B = [symengine.sqrt(ep0 + ep1 * x**2)]
-
-    ## Integrate model
-    SDE = jitcsde(A, B, n=1, additive=False)
-    SDE.set_initial_value([x0])
-    x_data = np.fromiter(
-        (SDE.integrate(t)[0] for t in times), dtype=float, count=num_datapoints
+    _, centers_x, pdf, moment_1, moment_2 = get_model(
+        folderpath, num_datapoints, dt, EVEN_ABS, coeffs, ep0, ep1, x0
     )
-    assert x_data.shape == (num_datapoints,)
-
-    fig_data, ax_data = plt.subplots()
-    ax_data.plot(times, x_data)
-    ax_data.set_ylabel(f"${param}(t)$")
-    ax_data.set_xlabel("$t$")
-
-    fig_data.tight_layout()
-    fig_data.savefig(folderpath / f"{MODEL_NAME}_data.png")
-
-    plt.close(fig_data)
-
-    fig_data, ax_data = plt.subplots()
-    lmt = int(1000 / dt)
-    ax_data.plot(times[:lmt], x_data[:lmt])
-    ax_data.set_ylabel(f"${param}(t)$")
-    ax_data.set_xlabel("$t$")
-
-    fig_data.tight_layout()
-    fig_data.savefig(folderpath / f"{MODEL_NAME}_data_zoom.png")
-    plt.close(fig_data)
-
-    ## Duplicate the data
-    if EVEN_ABS:
-        # When we make all even terms odd (by including the abs) then
-        # We are assuming symmetry in x, so put this symmetry in the dataset
-        x_data = np.append(x_data, -x_data)
-
-    ## Perform Kramers Moyal
-    edges = np.linspace(np.min(x_data), np.max(x_data), num_bins + 1)
-    # edges = np.linspace(-0.005, 0.005, num_bins + 1)
-    kmc, centers = km(x_data[..., None], bins=(edges,), powers=2)  # type: ignore
-    pdf, moment_1, moment_2 = kmc
-    centers_x = centers[0]
-    pdf /= np.nansum(pdf)
-    moment_1 /= dt
-    moment_2 /= dt
-    del x_data
 
     ## Plot pdf and moments
     fig_pdf, ax_pdf = plt.subplots()
