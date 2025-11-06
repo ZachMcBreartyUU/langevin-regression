@@ -33,6 +33,7 @@ from utils_lasso import (
     _square_diff,
     _lasso,
     _kl_reg,
+    THRESHOLD,
 )
 
 
@@ -459,11 +460,10 @@ def run_sindy_model_LASSO(
         lamb_expr = sympy.lambdify(x_sym, C_lib_expr[k])
         lib_C[k] = lamb_expr(centers_x)
 
-    n_terms = num_A_expr + num_C_expr
-
     ## Perform LASSO regression
     Xi0 = np.empty((num_A_expr + num_C_expr))
     Xi0[:num_A_expr] = lstsq(lib_A.T, moment_1)[0]
+    Xi0[num_A_expr - 1] = -np.abs(Xi0[num_A_expr - 1])
     Xi0[num_A_expr:] = lstsq(lib_C.T, moment_2)[0]
     print(f"{Xi0=}")
     if ERROR_WEIGHTS:
@@ -489,6 +489,7 @@ def run_sindy_model_LASSO(
         "sfp": sfp,
         "pdf": pdf,
         "kl_reg": kl_reg,
+        "lasso": lasso,
     }
 
     if kl_reg > 0:
@@ -497,7 +498,7 @@ def run_sindy_model_LASSO(
         opt_func = partial(optimise_function, cost_lasso)
 
     Xi, cost_ = opt_func(params)
-    Xi[Xi < 1e-8] = 0  # threshold
+    Xi[Xi < THRESHOLD] = 0  # threshold
     print(f"{Xi=}")
     print(f"{cost_=}")
     sparsity = np.count_nonzero(Xi)

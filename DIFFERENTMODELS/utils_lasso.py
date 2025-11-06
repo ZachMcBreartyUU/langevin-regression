@@ -8,6 +8,8 @@ from scipy.optimize import minimize
 
 from utils import kl_divergence
 
+THRESHOLD = 1e-8
+
 
 def _square_diff(W, A_vals, A_km, C_vals, C_km):
     return np.nansum(W[0] * (A_vals - A_km) ** 2 + W[1] * (C_vals - C_km) ** 2) / len(
@@ -25,6 +27,8 @@ def _lasso(Xi):
 
 
 def cost(Xi, params):
+    Xi[Xi < THRESHOLD] = 0
+
     lasso = params["lasso"]
     W = params["W"]
 
@@ -49,6 +53,8 @@ def cost(Xi, params):
 
 
 def cost_KL(Xi, params):
+    Xi[Xi < THRESHOLD] = 0
+
     lasso = params["lasso"]
     W = params["W"]
 
