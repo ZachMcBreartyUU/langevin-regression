@@ -58,7 +58,7 @@ def run_sindy_model(
     folderpath: Path = SCRATCH_PATH,
     param="x",
 ):
-    ADD_TERMS = 0  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
+    ADD_TERMS = 1  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
     folderpath = folderpath / MODEL_NAME
     folderpath.mkdir(exist_ok=True, parents=True)
     _, centers_x, pdf, moment_1, moment_2 = get_model(
@@ -131,6 +131,18 @@ def run_sindy_model(
         first_weight = np.ones_like(pdf)
         second_weight = np.ones_like(pdf)
     weights = np.array([first_weight, second_weight])
+
+    fig_weights, (ax_WA, ax_WC) = plt.subplots(2)
+    ax_WA: Axes
+    ax_WC: Axes
+    ax_WA.plot(centers_x, first_weight)
+    ax_WA.set_xlabel(f"${param}$")
+    ax_WA.set_ylabel(f"First weight, A(${param}$)")
+    ax_WC.plot(centers_x, second_weight)
+    ax_WC.set_xlabel(f"${param}$")
+    ax_WC.set_ylabel(f"Second weight, C(${param}$)")
+    fig_weights.savefig(folderpath / f"{MODEL_NAME}_weights.png")
+    plt.close(fig_weights)
 
     sfp = SteadyFP(num_bins, centers_x[1] - centers_x[0])
 
@@ -343,7 +355,7 @@ def run_sindy_model_LASSO(
     folderpath: Path = SCRATCH_PATH,
     param="x",
 ):
-    ADD_TERMS = 0  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
+    ADD_TERMS = 1  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
     folderpath = folderpath / MODEL_NAME
     folderpath.mkdir(exist_ok=True, parents=True)
     _, centers_x, pdf, moment_1, moment_2 = get_model(
@@ -404,7 +416,7 @@ def run_sindy_model_LASSO(
     ## Perform LASSO regression
     Xi0 = np.empty((num_A_expr + num_C_expr))
     Xi0[:num_A_expr] = lstsq(lib_A.T, moment_1)[0]
-    Xi0[num_A_expr - 1] = -np.abs(Xi0[num_A_expr - 1])
+    # Xi0[num_A_expr - 1] = -np.abs(Xi0[num_A_expr - 1])
     Xi0[num_A_expr:] = lstsq(lib_C.T, moment_2)[0]
     print(f"{Xi0=}")
     if ERROR_WEIGHTS:
@@ -415,6 +427,18 @@ def run_sindy_model_LASSO(
         first_weight = np.ones_like(pdf)
         second_weight = np.ones_like(pdf)
     weights = np.array([first_weight, second_weight])
+
+    fig_weights, (ax_WA, ax_WC) = plt.subplots(2)
+    ax_WA: Axes
+    ax_WC: Axes
+    ax_WA.plot(centers_x, first_weight)
+    ax_WA.set_xlabel(f"${param}$")
+    ax_WA.set_ylabel(f"First weight, A(${param}$)")
+    ax_WC.plot(centers_x, second_weight)
+    ax_WC.set_xlabel(f"${param}$")
+    ax_WC.set_ylabel(f"Second weight, C(${param}$)")
+    fig_weights.savefig(folderpath / f"{MODEL_NAME}_weights.png")
+    plt.close(fig_weights)
 
     sfp = SteadyFP(num_bins, centers_x[1] - centers_x[0])
 
@@ -432,14 +456,12 @@ def run_sindy_model_LASSO(
         "kl_reg": kl_reg,
         "lasso": lasso,
     }
-
     if kl_reg > 0:
         opt_func = partial(optimise_function, cost_KL_lasso)
     else:
         opt_func = partial(optimise_function, cost_lasso)
 
     Xi, cost_ = opt_func(params)
-    Xi[Xi < THRESHOLD] = 0  # threshold
     print(f"{Xi=}")
     print(f"{cost_=}")
     sparsity = np.count_nonzero(Xi)
