@@ -90,6 +90,51 @@ def cost_KL(Xi, params):
     return V + KL_val
 
 
+def cost_jef(Xi, params):
+    """
+    Least-squares cost function for optimization
+    This version is only good in 1D, but could be extended pretty easily
+    Xi - current coefficient estimates
+    param - inputs to optimization problem:
+        W, A_KM, C_KM, A_expr, C_expr
+    """
+
+    # Unpack parameters
+    W = params["W"]  # Optimization weights
+
+    # Kramers-Moyal coefficients
+    A_KM = params["A_KM"]
+    C_KM = params["C_KM"]
+
+    lib_A = params["lib_A"]
+    lib_C = params["lib_C"]
+
+    data_pdf = params["pdf"]
+    sfp = params["sfp"]
+    kl_reg = params["kl_reg"]
+
+    # Construct parameterized drift and diffusion functions from libraries and current coefficients
+    A_coeff = Xi[: lib_A.shape[0]]
+    A_vals = lib_A.T @ A_coeff
+    C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
+
+    # Histogram points without data have NaN values in K-M average - ignore these in the average
+    V = np.nansum(W[0] * np.abs((A_vals - A_KM) / A_KM) ** 2) + np.nansum(
+        W[1] * np.abs((C_vals - C_KM) / C_KM) ** 2
+    )
+    V /= len(A_vals)  # Norm based on number of bins?
+
+    sfp_pdf = sfp.solve(A_vals, C_vals)
+    jef_val = (
+        max(jeffreys_divergence(data_pdf, sfp_pdf, sfp.dx, tol=1e-6), 0.0) * kl_reg
+    )
+
+    # Penalise an equation with non-negative coefficient on largest term
+    if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
+        return np.inf
+    return V + jef_val
+
+
 def optimise_function(cost, params, maxfev=1e5):
     Xi0 = params["Xi0"]
 
@@ -210,6 +255,21 @@ def kl_divergence(
     q[q < tol] = tol
     p[p < tol] = tol
     return np.abs(ntrapz(p * np.log(p / q), dx))
+
+
+def jeffreys_divergence(
+    p_in: np.ndarray,
+    q_in: np.ndarray,
+    dx: float | list[float] = 1.0,
+    tol: Optional[float] = None,
+):
+    if tol is None:
+        tol = max(min(p_in.flatten()), min(q_in.flatten()))
+    q = q_in.copy()
+    p = p_in.copy()
+    q[q < tol] = tol
+    p[p < tol] = tol
+    return np.abs(ntrapz(p * np.log(p / q), dx) + ntrapz(q * np.log(q / p), dx))
 
 
 class SteadyFP:
