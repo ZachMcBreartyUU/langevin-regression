@@ -17,30 +17,32 @@ from jitcsde import jitcsde, y
 from kramersmoyal import km
 
 from utils import (
-    cost,
-    cost_KL,
     optimise_function,
     sindy_model,
     kl_divergence,
     SteadyFP,
-    SSR_loop,
 )
-from utils_parallel import SSR_loop_parallel
+
+from utils_lasso import (
+    cost as cost_lasso,
+    cost_KL as cost_KL_lasso,
+    _square_diff,
+    _lasso,
+)
+
 
 SCRATCH_PATH = Path(f"/scratch/seismology/zach/softglass/")
 
 
-def run_sindy_model(
+def run_sindy_model_LASSO(
     MODEL_NAME,
-    LOG_COST=False,
-    LARGEST_JUMP=False,
     EVEN_ABS=False,
-    PARALLEL=False,
     ERROR_WEIGHTS=False,
     dt=0.001,
     num_datapoints=10_000_000,
     num_bins=100,
     kl_reg=0.001,
+    lasso=0.01,
     ep0=0.2,
     ep1=0.1,
     coeffs=[0.0, -1.0, 0.0, 1.0],
@@ -106,11 +108,10 @@ def run_sindy_model(
         lamb_expr = sympy.lambdify(x_sym, C_lib_expr[k])
         lib_C[k] = lamb_expr(centers_x)
 
-    n_terms = num_A_expr + num_C_expr
-
-    ## Perform SSR
+    ## Perform LASSO regression
     Xi0 = np.empty((num_A_expr + num_C_expr))
     Xi0[:num_A_expr] = lstsq(lib_A.T, moment_1)[0]
+    # Xi0[num_A_expr - 1] = -np.abs(Xi0[num_A_expr - 1])
     Xi0[num_A_expr:] = lstsq(lib_C.T, moment_2)[0]
     print(f"{Xi0=}")
     if ERROR_WEIGHTS:
@@ -148,41 +149,23 @@ def run_sindy_model(
         "sfp": sfp,
         "pdf": pdf,
         "kl_reg": kl_reg,
+        "lasso": lasso,
     }
-
     if kl_reg > 0:
-        opt_func = partial(optimise_function, cost_KL)
+        opt_func = partial(optimise_function, cost_KL_lasso)
     else:
-        opt_func = partial(optimise_function, cost)
+        opt_func = partial(optimise_function, cost_lasso)
 
-    if PARALLEL:
-        Xi, costs, active_history = SSR_loop_parallel(opt_func, params)
-    else:
-        Xi, costs, active_history, _ = SSR_loop(opt_func, params)
+    Xi, cost_ = opt_func(params)
     print(f"{Xi=}")
-    print(f"{costs=}")
-    print(f"{active_history=}")
-
-    # choose model
-    if LOG_COST:
-        costs = np.log(costs)
-    dcosts = costs[1:] - costs[:-1]
-
-    if LARGEST_JUMP:
-        selected_model = np.argmax(dcosts)
-    else:  # First jump
-        masked = dcosts
-        masked[dcosts < np.max(dcosts) / 10] = 0
-        # find the first jump greater than 1/10 of the largest jump
-        selected_model = np.nonzero(masked)[0][0]
-    print(f"Selected model with sparsity {n_terms - selected_model}")
-    chosen_V = costs[selected_model]
-    chosen_Xi = Xi[selected_model]
+    print(f"{cost_=}")
+    sparsity = np.count_nonzero(Xi)
+    print(f"{sparsity=}")
 
     # TODO: Could perform some rounding on the found params, e.g. 0.012324 -> 0.012
-    A_sym = sindy_model(chosen_Xi[:num_A_expr], A_lib_expr)
+    A_sym = sindy_model(Xi[:num_A_expr], A_lib_expr)
     A_sindy = sympy.lambdify(x_sym, A_sym)(centers_x)
-    C_sym = sindy_model(chosen_Xi[num_A_expr:], C_lib_expr)
+    C_sym = sindy_model(Xi[num_A_expr:], C_lib_expr)
     C_sindy = sympy.lambdify(x_sym, C_sym)(centers_x)
 
     if np.ndim(A_sindy) == 0:
@@ -192,71 +175,20 @@ def run_sindy_model(
 
     print(f"dx = ({A_sym}) dt + ({sympy.sqrt(2.0*C_sym)}) dβ")
 
+    lasso_val = _lasso(Xi)
     pdf_sindy = sfp.solve(A_sindy, C_sindy)
-    kl_div = kl_divergence(pdf, pdf_sindy)
-    kl_val = kl_div * kl_reg
-    print(f"KL div = {kl_div} * {kl_reg} = {kl_val}")
-    if LOG_COST:
-        init = np.exp(chosen_V)
-        print(f"Raw cost = {np.log(init - kl_val)}")
-    else:
-        print(f"Raw cost = {chosen_V - kl_val}")
+    kl_val = max(kl_divergence(pdf, pdf_sindy, sfp.dx, tol=1e-6), 0.0)
+    sqr_diff = _square_diff(weights, A_sindy, moment_1, C_sindy, moment_2)
+
+    print(f"lasso_val = {lasso} * {lasso_val} = {lasso * lasso_val}")
+    print(
+        f"kl_val = {(1 - lasso) * (kl_reg)} * {kl_val} = {(1 - lasso) * (kl_reg) * kl_val}"
+    )
+    print(
+        f"sqr_diff = {(1-lasso)*(1-kl_reg)} * {sqr_diff} = {(1-lasso)*(1-kl_reg) * sqr_diff}"
+    )
 
     ## Plot results
-    # Plot cost and dcost OR log(cost) and dlog(cost)
-    fig_cost, (ax_cost, ax_dcost) = plt.subplots(2, figsize=(6, 6))
-    ax_cost: Axes
-    ax_dcost: Axes
-    sparsity = np.arange(n_terms, 1, -1)
-    ax_cost.scatter(sparsity, costs)
-    ax_dcost.scatter(sparsity[:-1], dcosts)
-
-    min_, max_ = ax_cost.get_xlim()[::-1]
-    ax_cost.set_xlim(min_, max_)
-    ax_cost.set_xlabel("Sparsity")
-    ax_dcost.set_xlim(min_, max_)
-    ax_dcost.set_xlabel("Sparsity")
-
-    if LOG_COST:
-        # The logging happened when the model was being chosen
-        ax_cost.set_ylabel(r"log Cost, $\log V$")
-        ax_dcost.set_ylabel(r"dlog Cost, $d\log V$")
-        fig_cost.tight_layout()
-        fig_cost.savefig(folderpath / f"{MODEL_NAME}_SSR_logcost.png")
-    else:
-        ax_cost.set_ylabel("Cost, $V$")
-        ax_dcost.set_ylabel("dCost, $dV$")
-        fig_cost.tight_layout()
-        fig_cost.savefig(folderpath / f"{MODEL_NAME}_SSR_cost.png")
-    plt.close(fig_cost)
-
-    # Plot history
-    fig_history, ax_history = plt.subplots()
-
-    sympy_labels = [
-        rf"${sympy.latex(t)}$" for t in np.concatenate((A_lib_expr, C_lib_expr))
-    ]
-
-    square = np.zeros_like(Xi.T)
-    for i, hist in enumerate(active_history):
-        square[hist, i] = 1
-    square = square.astype(bool)
-
-    # histories
-    ax_history.pcolor(square, cmap="bone_r", edgecolors="gray")
-    # drift / diffusion delimiters
-    ax_history.axhline(y=num_A_expr, color="red")
-    ax_history.set_yticks(0.5 + np.arange(n_terms))
-    ax_history.set_yticklabels(sympy_labels)
-    ax_history.set_xticks(0.5 + np.arange(n_terms - 1))
-    ax_history.set_xticklabels(sparsity)
-    ax_history.set_xlabel("Sparsity")
-    ax_history.set_ylabel("Active terms")
-
-    fig_history.tight_layout()
-    fig_history.savefig(folderpath / f"{MODEL_NAME}_SSR_sparsity.png")
-    plt.close(fig_history)
-
     # Plot found pdf vs KM pdf
     fig_pdf_comp, ax_pdf_comp = plt.subplots()
 
@@ -296,37 +228,6 @@ def run_sindy_model(
     fig_moments_comp.savefig(folderpath / f"{MODEL_NAME}_moments_comparison_yzoom.png")
 
     plt.close(fig_moments_comp)
-
-    ## Directly compare True answer to Found answer
-    true_model_xi = np.zeros(n_terms)
-    true_model_xi[: num_A_expr - ADD_TERMS] = np.array(coeffs)
-    true_model_xi[num_A_expr + 0] = ep0
-    true_model_xi[num_A_expr + 2] = ep1
-
-    differences = np.abs(chosen_Xi - true_model_xi)
-    print("Sum of differences in true vs found model:", sum(differences))
-
-    fig_direct, (ax_true, ax_found, ax_difference) = plt.subplots(3)
-    ax_true: Axes
-    ax_found: Axes
-    ax_difference: Axes
-
-    xaxis = np.arange(n_terms)
-    ax_true.set_ylabel("True coefficients, a")
-    ax_true.scatter(xaxis, true_model_xi)
-    ax_found.set_ylabel("Found coefficients, b")
-    ax_found.scatter(xaxis, chosen_Xi)
-    ax_difference.set_ylabel("$|(a - b)|$")
-    ax_difference.scatter(xaxis, differences)
-    ax_difference.set_ylim(bottom=0)
-
-    for ax in (ax_true, ax_found, ax_difference):
-        ax.set_xticks(xaxis)
-        ax.set_xticklabels(sympy_labels)
-
-    fig_direct.tight_layout()
-    fig_direct.savefig(folderpath / f"{MODEL_NAME}_direct_comparison.png")
-    plt.close(fig_direct)
 
 
 def _check_metadata(metadata, num_datapoints, dt, EVEN_ABS, coeffs, ep0, ep1, x0):
@@ -528,18 +429,15 @@ if __name__ == "__main__":
 
     coeffs = args.coeffs
     x0 = args.x0
-
-    run_sindy_model(
+    run_sindy_model_LASSO(
         MODEL_NAME,
-        LOG_COST,
-        LARGEST_JUMP,
         EVEN_ABS,
-        PARALLEL,
         ERROR_WEIGHTS,
         dt,
         num_datapoints,
         num_bins,
         kl_reg,
+        lasso,
         ep0,
         ep1,
         coeffs,
