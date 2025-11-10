@@ -499,7 +499,6 @@ if __name__ == "__main__":
     df.add_argument("-N", "--num-steps", type=int, default=10_000_000)
     df.add_argument("-B", "--num-bins", type=int, default=100)
     df.add_argument("-k", "--kl-reg", type=float, default=1e-3)
-    df.add_argument("-l", "--lasso", type=float, default=0)
 
     int_param_group = df.add_argument_group("Integration Parameters")
     int_param_group.add_argument("--EVEN_ABS", action="store_true")
@@ -522,7 +521,6 @@ if __name__ == "__main__":
     num_datapoints = args.num_steps
     num_bins = args.num_bins
     kl_reg = args.kl_reg
-    lasso = args.lasso
     ep0 = args.ep0
     ep1 = args.ep1
 
