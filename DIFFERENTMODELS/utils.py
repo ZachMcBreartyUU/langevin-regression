@@ -191,20 +191,19 @@ def SSR_loop(opt_fun, params):
             tmp_active = np.delete(tmp_active, j)  # Try deleting this term
 
             # Break off masks for drift/diffusion
-            f_active = tmp_active[tmp_active < len(A_expr)]
-            final_active = f_active[-1]
-            a_active = tmp_active[tmp_active >= len(A_expr)] - len(A_expr)
+            A_active = tmp_active[tmp_active < len(A_expr)]
+            C_active = tmp_active[tmp_active >= len(A_expr)] - len(A_expr)
 
-            params["A_expr"] = A_expr[f_active]
-            params["C_expr"] = C_expr[a_active]
-            params["lib_A"] = lib_A[f_active]
-            params["lib_C"] = lib_C[a_active]
-            tmp_xi0 = Xi0[tmp_active]
-            tmp_xi0[final_active] = -abs(tmp_xi0[final_active])
+            params["A_expr"] = A_expr[A_active]
+            params["C_expr"] = C_expr[C_active]
+            params["lib_A"] = lib_A[A_active]
+            params["lib_C"] = lib_C[C_active]
+            tmp_xi0 = Xi0[A_active[-1]]
+            tmp_xi0[A_active[-1]] = -abs(tmp_xi0[A_active[-1]])
             params["Xi0"] = tmp_xi0
 
             # Ensure that there is at least one drift and diffusion term left
-            if len(a_active) > 0 and len(f_active) > 0:
+            if len(C_active) > 0 and len(A_active) > 0:
                 tmp_Xi, tmp_V = opt_fun(params)
                 costs.append(tmp_V)
 
@@ -213,6 +212,8 @@ def SSR_loop(opt_fun, params):
                     min_idx = j
                     V[k] = tmp_V
                     min_Xi = tmp_Xi
+            else:
+                costs.append(np.inf)
         if min_idx is None:
             raise RuntimeError("Cost function returned NaN / inf for all costs")
         end = time()
@@ -224,10 +225,10 @@ def SSR_loop(opt_fun, params):
         Xi0[active] = min_Xi  # Re-initialize with best results from previous
         Xi[active, k] = min_Xi
         active_history.append(active)
-        f_active = active[active < len(A_expr)]
-        a_active = active[active >= len(A_expr)] - len(A_expr)
-        print(f"Active f: {A_expr[f_active]}")
-        print(f"Active a: {C_expr[a_active]}", flush=True)
+        A_active = active[active < len(A_expr)]
+        C_active = active[active >= len(A_expr)] - len(A_expr)
+        print(f"Active A: {A_expr[A_active]}")
+        print(f"Active C: {C_expr[C_active]}", flush=True)
 
     return Xi, V, active_history, cost_history
 
