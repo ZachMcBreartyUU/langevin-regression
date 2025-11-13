@@ -233,9 +233,9 @@ def run_sindy_model_stacking(
     print(f"KL div = {kl_div} * {kl_reg} = {kl_val}")
     if LOG_COST:
         init = np.exp(chosen_V)
-        print(f"Raw cost = {np.log(init - kl_val)}")
+        print(f"Raw cost = {np.log((init - kl_val) / kl_reg)}")
     else:
-        print(f"Raw cost = {chosen_V - kl_val}")
+        print(f"Raw cost = {(chosen_V - kl_val) / kl_reg}")
 
     ## Plot results
     # Plot cost and dcost OR log(cost) and dlog(cost)

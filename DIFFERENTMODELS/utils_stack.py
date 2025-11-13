@@ -75,10 +75,10 @@ def cost_KL_stack(Xi, params):
 
     sfp_pdf = sfp.solve(A_vals, C_vals)
     kl_divs = kl_divergence(data_pdfs, sfp_pdf, sfp.dx, tol=1e-6)
-    kl_div = np.sum(kl_divs[kl_divs > 0]) * kl_reg
+    kl_div = np.sum(kl_divs[kl_divs > 0])
 
     # Penalise an equation with non-negative coefficient on largest term
-    return V + kl_div
+    return V * (1 - kl_reg) + kl_div * kl_reg
 
 
 def cost_jef_stack(Xi, params):
@@ -124,7 +124,7 @@ def cost_jef_stack(Xi, params):
 
     sfp_pdf = sfp.solve(A_vals, C_vals)
     jef_divs = jeffreys_divergence(data_pdfs, sfp_pdf, sfp.dx, tol=1e-6)
-    jef_div = np.sum(jef_divs[jef_divs > 0]) * kl_reg
+    jef_div = np.sum(jef_divs[jef_divs > 0])
 
     # Penalise an equation with non-negative coefficient on largest term
-    return V + jef_div
+    return V * (1 - kl_reg) + jef_div * kl_reg
