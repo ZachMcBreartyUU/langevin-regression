@@ -373,13 +373,14 @@ def run_sindy_model_stacking(
             everymodel = folderpath / "everymodel"
             everymodel.mkdir(exist_ok=True)
             fig_moments_comp.savefig(
-                everymodel / f"{MODEL_NAME}_moments_comparison_sparsity_{sparsity}.png"
+                everymodel
+                / f"{MODEL_NAME}_moments_comparison_sparsity_{sparsity[i]}.png"
             )
 
             ax_A_comp.set_ylim(-0.4, 0.4)
             fig_moments_comp.savefig(
                 everymodel
-                / f"{MODEL_NAME}_moments_comparison_yzoom_sparsity_{sparsity}.png"
+                / f"{MODEL_NAME}_moments_comparison_yzoom_sparsity_{sparsity[i]}.png"
             )
 
             plt.close(fig_moments_comp)
