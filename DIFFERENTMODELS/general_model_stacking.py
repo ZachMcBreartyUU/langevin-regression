@@ -318,33 +318,86 @@ def run_sindy_model_stacking(
     plt.close(fig_pdf_comp)
 
     # Plot found model vs KM moments
-    fig_moments_comp, (ax_A_comp, ax_C_comp) = plt.subplots(2)
-    ax_A_comp: Axes
-    ax_C_comp: Axes
+    EXPLICIT = True
+    if EXPLICIT:
+        for i in range(len(Xis)):
+            Xi_rounded = round_array_to_SF(Xis[i], 2)
+            A_sym = sindy_model(Xi_rounded[:num_A_expr], A_lib_expr)
+            A_sindy = sympy.lambdify(x_sym, A_sym)(centers_sindy)
+            C_sym = sindy_model(Xi_rounded[num_A_expr:], C_lib_expr)
+            C_sindy = sympy.lambdify(x_sym, C_sym)(centers_sindy)
 
-    ax_A_comp.scatter(centers, moment_1s[0], marker="x", label="KM")
-    ax_C_comp.scatter(centers, moment_2s[0], marker="x", label="KM")
-    for moment_1, moment_2 in zip(moment_1s[1:], moment_2s[1:]):
-        ax_A_comp.scatter(centers, moment_1, marker="x")
-        ax_C_comp.scatter(centers, moment_2, marker="x")
-    ax_A_comp.plot(centers_sindy, A_sindy, "r", label="Found model")
-    ax_C_comp.plot(centers_sindy, C_sindy, "r", label="Found model")
+            if np.ndim(A_sindy) == 0:
+                A_sindy = np.full_like(centers_sindy, A_sindy)
+            if np.ndim(C_sindy) == 0:
+                C_sindy = np.full_like(centers_sindy, C_sindy)
 
-    ax_A_comp.set_xlabel(f"${param}$")
-    ax_A_comp.set_ylabel(f"First moment, A(${param}$)")
-    ax_C_comp.set_xlabel(f"${param}$")
-    ax_C_comp.set_ylabel(f"Second moment, C(${param}$)")
+            title = rf"$dx = ({sympy.latex(A_sym)}) dt + ({sympy.latex(sympy.sqrt(2.0*C_sym))}) d\beta$"
+            fig_moments_comp, (ax_A_comp, ax_C_comp) = plt.subplots(2)
+            ax_A_comp: Axes
+            ax_C_comp: Axes
 
-    ax_A_comp.legend()
-    # ax_C_comp.legend()
+            ax_A_comp.scatter(centers, moment_1s[0], marker="x", label="KM")
+            ax_C_comp.scatter(centers, moment_2s[0], marker="x", label="KM")
+            for moment_1, moment_2 in zip(moment_1s[1:], moment_2s[1:]):
+                ax_A_comp.scatter(centers, moment_1, marker="x")
+                ax_C_comp.scatter(centers, moment_2, marker="x")
+            ax_A_comp.plot(centers_sindy, A_sindy, "r", label="Found model")
+            ax_C_comp.plot(centers_sindy, C_sindy, "r", label="Found model")
 
-    fig_moments_comp.tight_layout()
-    fig_moments_comp.savefig(folderpath / f"{MODEL_NAME}_moments_comparison.png")
+            ax_A_comp.set_title(title)
+            ax_A_comp.set_xlabel(f"${param}$")
+            ax_A_comp.set_ylabel(f"First moment, A(${param}$)")
+            ax_C_comp.set_xlabel(f"${param}$")
+            ax_C_comp.set_ylabel(f"Second moment, C(${param}$)")
 
-    ax_A_comp.set_ylim(-0.4, 0.4)
-    fig_moments_comp.savefig(folderpath / f"{MODEL_NAME}_moments_comparison_yzoom.png")
+            ax_A_comp.legend()
+            # ax_C_comp.legend()
 
-    plt.close(fig_moments_comp)
+            fig_moments_comp.tight_layout()
+            everymodel = folderpath / "everymodel"
+            everymodel.mkdir(exist_ok=True)
+            fig_moments_comp.savefig(
+                everymodel / f"{MODEL_NAME}_moments_comparison_sparsity_{sparsity}.png"
+            )
+
+            ax_A_comp.set_ylim(-0.4, 0.4)
+            fig_moments_comp.savefig(
+                everymodel
+                / f"{MODEL_NAME}_moments_comparison_yzoom_sparsity_{sparsity}.png"
+            )
+
+            plt.close(fig_moments_comp)
+    else:
+        fig_moments_comp, (ax_A_comp, ax_C_comp) = plt.subplots(2)
+        ax_A_comp: Axes
+        ax_C_comp: Axes
+
+        ax_A_comp.scatter(centers, moment_1s[0], marker="x", label="KM")
+        ax_C_comp.scatter(centers, moment_2s[0], marker="x", label="KM")
+        for moment_1, moment_2 in zip(moment_1s[1:], moment_2s[1:]):
+            ax_A_comp.scatter(centers, moment_1, marker="x")
+            ax_C_comp.scatter(centers, moment_2, marker="x")
+        ax_A_comp.plot(centers_sindy, A_sindy, "r", label="Found model")
+        ax_C_comp.plot(centers_sindy, C_sindy, "r", label="Found model")
+
+        ax_A_comp.set_xlabel(f"${param}$")
+        ax_A_comp.set_ylabel(f"First moment, A(${param}$)")
+        ax_C_comp.set_xlabel(f"${param}$")
+        ax_C_comp.set_ylabel(f"Second moment, C(${param}$)")
+
+        ax_A_comp.legend()
+        # ax_C_comp.legend()
+
+        fig_moments_comp.tight_layout()
+        fig_moments_comp.savefig(folderpath / f"{MODEL_NAME}_moments_comparison.png")
+
+        ax_A_comp.set_ylim(-0.4, 0.4)
+        fig_moments_comp.savefig(
+            folderpath / f"{MODEL_NAME}_moments_comparison_yzoom.png"
+        )
+
+        plt.close(fig_moments_comp)
 
     ## Directly compare True answer to Found answer
     true_model_xi = np.zeros(n_terms)
