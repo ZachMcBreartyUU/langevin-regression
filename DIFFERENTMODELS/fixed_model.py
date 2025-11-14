@@ -415,6 +415,13 @@ start = time()
 import os
 
 NUM_CPUS = int(os.environ.get("SLURM_NTASKS_PER_NODE", default=1))
+print(f"{NUM_CPUS=}")
+# do_test_parallel(
+#     "dt", np.logspace(-4, -1, 30), target_name="dt zoom", POOLSIZE=NUM_CPUS
+# )
 do_test_parallel(
-    "dt", np.logspace(-4, -1, 30), target_name="dt zoom", POOLSIZE=NUM_CPUS
+    "kl_reg",
+    np.array([0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e0, 1e2]),
+    target_name="kl_reg",
+    POOLSIZE=NUM_CPUS,
 )

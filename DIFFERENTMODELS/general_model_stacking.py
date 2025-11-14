@@ -50,10 +50,11 @@ def run_sindy_model_stacking(
     x0=0.0,
     folderpath: Path = SCRATCH_PATH,
     param="x",
-    models_dir="MODELS",
+    models_dir="MODELS",  # TODO: CL ARGUMENT
+    ADD_TERMS=1,  # TODO: CL ARGUMENT
+    NUM_STACKS=10,  # TODO: CL ARGUMENT
+    EXPLICIT=True,  # TODO: CL ARGUMENT
 ):
-    ADD_TERMS = 1  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
-    NUM_STACKS = 10  # TODO: MAKE INTO FUNCTION ARGUMENT AND CL ARGUMENT
     folderpath = folderpath / MODEL_NAME
     folderpath.mkdir(exist_ok=True, parents=True)
 
@@ -318,7 +319,6 @@ def run_sindy_model_stacking(
     plt.close(fig_pdf_comp)
 
     # Plot found model vs KM moments
-    EXPLICIT = True
     if EXPLICIT:
         for i in range(len(Xis)):
             Xi_rounded = round_array_to_SF(Xis[i], 2)

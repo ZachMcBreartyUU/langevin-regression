@@ -132,19 +132,20 @@ if __name__ == "__main__":
     # range_var = np.logspace(-10, 0, 20)
     # do_plot("kl_reg", range_var, *do_load("kl_reg"))
     ld = do_load("dt zoom")
-    ld2 = do_load("dt")
-    ld2[1][6] = np.inf
-    ld3 = (
-        np.append(ld[0], ld2[0]),
-        np.append(ld[1], ld2[1]),
-        np.append(ld[2], ld2[2], axis=1),
-        np.append(ld[3], ld2[3], axis=0),
-        np.append(ld[4], ld2[4], axis=0),
-        np.append(ld[5], ld2[5], axis=0),
-    )
+    ld[1][18] = np.inf
+    # ld2 = do_load("dt")
+    # ld2[1][6] = np.inf
+    # ld3 = (
+    #     np.append(ld[0], ld2[0]),
+    #     np.append(ld[1], ld2[1]),
+    #     np.append(ld[2], ld2[2], axis=1),
+    #     np.append(ld[3], ld2[3], axis=0),
+    #     np.append(ld[4], ld2[4], axis=0),
+    #     np.append(ld[5], ld2[5], axis=0),
+    # )
 
     # print(np.log10(ld[0][5:8]))
-    do_plot("dt_both", *ld3)
+    do_plot("dt_zoom", *ld)
     # range_var = np.logspace(1, 3, 20).astype(int)
     # do_plot("num_bins", range_var, *do_load("num_bins"))
     # range_var = np.logspace(-7, 0, 20)
