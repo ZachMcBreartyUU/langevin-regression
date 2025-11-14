@@ -22,7 +22,10 @@ def round_to_SF(val, SF):
 
 def round_array_to_SF(vals, SF):
     assert SF >= 1
-    roundings = -np.astype(np.floor(np.log10(vals)), int) + (SF - 1)
+    roundings: np.ndarray = np.zeros_like(vals)
+    avals = np.abs(vals)
+    roundings[avals > 0] = -np.floor(np.log10(avals[avals > 0])) + (SF - 1)
+    roundings = roundings.astype(int)
 
     return np.fromiter(
         (np.round(val, rounding) for val, rounding in zip(vals, roundings)),
