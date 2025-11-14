@@ -145,8 +145,14 @@ def run_sindy_model_stacking(
         # first_weights = np.ones_like(pdfs)
         # second_weights = np.ones_like(pdfs)
         # Calculate weights by the spread of the data
-        first_weights = 1 / np.std(moment_1s, axis=0, keepdims=True)  # (1, N_BINS)
-        second_weights = 1 / np.std(moment_2s, axis=0, keepdims=True)  # (1, N_BINS)
+        first_weights = np.abs(
+            1  # np.mean(moment_1s, axis=0, keepdims=True)
+            / np.std(moment_1s, axis=0, keepdims=True)
+        )  # (1, N_BINS)
+        second_weights = np.abs(
+            1  # np.mean(moment_2s, axis=0, keepdims=True)
+            / np.std(moment_2s, axis=0, keepdims=True)
+        )  # (1, N_BINS)
     first_weights /= np.sum(first_weights, axis=1, keepdims=True)  # (1, N_BINS)
     second_weights /= np.sum(second_weights, axis=1, keepdims=True)  # (1, N_BINS)
 
@@ -250,7 +256,6 @@ def run_sindy_model_stacking(
     )
 
     pdf_sindy = sfp.solve(A_sindy, C_sindy)
-    # compare only the first PDF with the SINDy model (for now?)
     kl_divs = kl_divergence(pdfs, pdf_sindy, sfp.dx, tol=1e-6)
     kl_div = np.sum(kl_divs[kl_divs > 0])
     kl_val = kl_div * kl_reg
@@ -316,23 +321,6 @@ def run_sindy_model_stacking(
     fig_history.savefig(folderpath / f"{MODEL_NAME}_SSR_sparsity.png")
     plt.close(fig_history)
 
-    # Plot found pdf vs KM pdf
-    fig_pdf_comp, ax_pdf_comp = plt.subplots()
-
-    # This norming should be redundant
-    pdfs_normed = pdfs / np.nansum(pdfs, axis=1, keepdims=True)
-    pdf_sindy_normed = pdf_sindy / np.nansum(pdf_sindy)
-    ax_pdf_comp.plot(centers, pdfs_normed[0], label="Data")
-    for pdf_normed in pdfs_normed[1:]:
-        ax_pdf_comp.plot(centers, pdf_normed)
-    ax_pdf_comp.plot(centers_sindy, pdf_sindy_normed, "--", label="SINDy")
-    ax_pdf_comp.set_ylabel(f"PDF(${param}$)")
-    ax_pdf_comp.set_xlabel(f"${param}$")
-    ax_pdf_comp.legend()
-    fig_pdf_comp.tight_layout()
-    fig_pdf_comp.savefig(folderpath / f"{MODEL_NAME}_pdf_comparison.png")
-    plt.close(fig_pdf_comp)
-
     # Plot found model vs KM moments
     if EXPLICIT:
         for i in range(len(Xis)):
@@ -384,6 +372,27 @@ def run_sindy_model_stacking(
             )
 
             plt.close(fig_moments_comp)
+
+            pdf_sindy = sfp.solve(A_sindy, C_sindy)
+            # Plot found pdf vs KM pdf
+            fig_pdf_comp, ax_pdf_comp = plt.subplots()
+
+            pdfs_normed = pdfs / np.nansum(pdfs, axis=1, keepdims=True)
+            pdf_sindy_normed = pdf_sindy / np.nansum(pdf_sindy)
+            ax_pdf_comp.plot(centers, pdfs_normed[0], label="Data")
+            for pdf_normed in pdfs_normed[1:]:
+                ax_pdf_comp.plot(centers, pdf_normed)
+            ax_pdf_comp.plot(centers_sindy, pdf_sindy_normed, "--", label="SINDy")
+
+            ax_pdf_comp.set_title(title)
+            ax_pdf_comp.set_ylabel(f"PDF(${param}$)")
+            ax_pdf_comp.set_xlabel(f"${param}$")
+            ax_pdf_comp.legend()
+            fig_pdf_comp.tight_layout()
+            fig_pdf_comp.savefig(
+                folderpath / f"{MODEL_NAME}_pdf_comparison_sparsity_{sparsity[i]}.png"
+            )
+            plt.close(fig_pdf_comp)
     else:
         fig_moments_comp, (ax_A_comp, ax_C_comp) = plt.subplots(2)
         ax_A_comp: Axes
@@ -414,6 +423,23 @@ def run_sindy_model_stacking(
         )
 
         plt.close(fig_moments_comp)
+
+        # Plot found pdf vs KM pdf
+        fig_pdf_comp, ax_pdf_comp = plt.subplots()
+
+        # This norming should be redundant
+        pdfs_normed = pdfs / np.nansum(pdfs, axis=1, keepdims=True)
+        pdf_sindy_normed = pdf_sindy / np.nansum(pdf_sindy)
+        ax_pdf_comp.plot(centers, pdfs_normed[0], label="Data")
+        for pdf_normed in pdfs_normed[1:]:
+            ax_pdf_comp.plot(centers, pdf_normed)
+        ax_pdf_comp.plot(centers_sindy, pdf_sindy_normed, "--", label="SINDy")
+        ax_pdf_comp.set_ylabel(f"PDF(${param}$)")
+        ax_pdf_comp.set_xlabel(f"${param}$")
+        ax_pdf_comp.legend()
+        fig_pdf_comp.tight_layout()
+        fig_pdf_comp.savefig(folderpath / f"{MODEL_NAME}_pdf_comparison.png")
+        plt.close(fig_pdf_comp)
 
     ## Directly compare True answer to Found answer
     true_model_xi = np.zeros(n_terms)
