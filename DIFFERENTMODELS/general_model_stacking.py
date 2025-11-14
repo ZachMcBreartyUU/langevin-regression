@@ -159,11 +159,26 @@ def run_sindy_model_stacking(
         ax_WA.scatter(centers, first_weight)
         ax_WC.scatter(centers, second_weight)
     ax_WA.set_xlabel(f"${param}$")
-    ax_WA.set_ylabel(f"First weight, A(${param}$)")
+    ax_WA.set_ylabel(f"First weight, $W_A({param})$")
     ax_WC.set_xlabel(f"${param}$")
-    ax_WC.set_ylabel(f"Second weight, C(${param}$)")
+    ax_WC.set_ylabel(f"Second weight, $W_C({param})$")
     fig_weights.savefig(folderpath / f"{MODEL_NAME}_weights_stack.png")
     plt.close(fig_weights)
+
+    fig_weights_log, (ax_WA_log, ax_WC_log) = plt.subplots(2)
+    ax_WA_log: Axes
+    ax_WC_log: Axes
+    for first_weight, second_weight in zip(
+        np.log10(first_weights), np.log10(second_weights)
+    ):
+        ax_WA_log.scatter(centers, first_weight)
+        ax_WC_log.scatter(centers, second_weight)
+    ax_WA_log.set_xlabel(f"${param}$")
+    ax_WA_log.set_ylabel(rf"log First weight, $\log W_A({param})$")
+    ax_WC_log.set_xlabel(f"${param}$")
+    ax_WC_log.set_ylabel(rf"log Second weight, $\log W_C({param})$")
+    fig_weights_log.savefig(folderpath / f"{MODEL_NAME}_log_weights_stack.png")
+    plt.close(fig_weights_log)
 
     sfp = SteadyFP(num_bins, centers[1] - centers[0])
 
