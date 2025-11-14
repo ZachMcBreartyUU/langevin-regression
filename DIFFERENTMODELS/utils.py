@@ -15,6 +15,22 @@ def sindy_model(Xi, expr_list):
     )
 
 
+def round_to_SF(val, SF):
+    assert SF >= 1
+    return np.round(val, -np.astype(np.floor(np.log10(val)), int) + (SF - 1))
+
+
+def round_array_to_SF(vals, SF):
+    assert SF >= 1
+    roundings = -np.astype(np.floor(np.log10(vals)), int) + (SF - 1)
+
+    return np.fromiter(
+        (np.round(val, rounding) for val, rounding in zip(vals, roundings)),
+        float,
+        len(vals),
+    )
+
+
 def cost(Xi, params):
     """
     Least-squares cost function for optimization
