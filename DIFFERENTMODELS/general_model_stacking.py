@@ -24,6 +24,7 @@ from utils import (
     kl_divergence,
     SteadyFP,
     SSR_loop,
+    round_array_to_SF,
 )
 from utils_parallel import SSR_loop_parallel
 from utils_stack import cost_stack, cost_KL_stack, cost_jef_stack
@@ -186,10 +187,10 @@ def run_sindy_model_stacking(
         opt_func = partial(optimise_function, cost_stack)
 
     if PARALLEL:
-        Xi, costs, active_history = SSR_loop_parallel(opt_func, params)
+        Xis, costs, active_history = SSR_loop_parallel(opt_func, params)
     else:
-        Xi, costs, active_history, _ = SSR_loop(opt_func, params)
-    print(f"{Xi=}")
+        Xis, costs, active_history, _ = SSR_loop(opt_func, params)
+    print(f"{Xis=}")
     print(f"{costs=}")
     print(f"{active_history=}\n")
 
@@ -207,7 +208,7 @@ def run_sindy_model_stacking(
         selected_model = np.nonzero(masked)[0][0]
     print(f"Selected model with sparsity {n_terms - selected_model}")
     chosen_V = costs[selected_model]
-    chosen_Xi = Xi[selected_model]
+    chosen_Xi = Xis[selected_model]
 
     # use only the first set of bins for SINDy
     centers_sindy = centers[:num_bins]
@@ -224,6 +225,13 @@ def run_sindy_model_stacking(
         C_sindy = np.full_like(centers_sindy, C_sindy)
 
     print(f"dx = ({A_sym}) dt + ({sympy.sqrt(2.0*C_sym)}) dβ")
+
+    chosen_Xi_round = round_array_to_SF(chosen_Xi, 2)
+    A_sym_round = sindy_model(chosen_Xi_round[:num_A_expr], A_lib_expr)
+    C_sym_round = sindy_model(chosen_Xi_round[num_A_expr:], C_lib_expr)
+    print(
+        rf"dx = ({sympy.latex(A_sym_round)}) dt + ({sympy.latex(sympy.sqrt(2.0*C_sym_round))}) d\beta"
+    )
 
     pdf_sindy = sfp.solve(A_sindy, C_sindy)
     # compare only the first PDF with the SINDy model (for now?)
@@ -272,7 +280,7 @@ def run_sindy_model_stacking(
         rf"${sympy.latex(t)}$" for t in np.concatenate((A_lib_expr, C_lib_expr))
     ]
 
-    square = np.zeros_like(Xi.T)
+    square = np.zeros_like(Xis.T)
     for i, hist in enumerate(active_history):
         square[hist, i] = 1
     square = square.astype(bool)
