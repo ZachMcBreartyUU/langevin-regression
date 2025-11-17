@@ -91,6 +91,9 @@ def cost_KL(Xi, params):
 
     # Construct parameterized drift and diffusion functions from libraries and current coefficients
     A_coeff = Xi[: lib_A.shape[0]]
+    # Penalise an equation with non-negative coefficient on largest term
+    if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
+        return np.inf
     A_vals = lib_A.T @ A_coeff
     C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
 
@@ -101,12 +104,9 @@ def cost_KL(Xi, params):
     V /= len(A_vals)  # Norm based on number of bins?
 
     sfp_pdf = sfp.solve(A_vals, C_vals)
-    KL_val = max(kl_divergence(data_pdf, sfp_pdf, sfp.dx, tol=1e-6), 0.0) * kl_reg
+    kl_div = max(kl_divergence(data_pdf, sfp_pdf, sfp.dx, tol=1e-6), 0.0)
 
-    # Penalise an equation with non-negative coefficient on largest term
-    if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
-        return np.inf
-    return V + KL_val
+    return V * (1 - kl_reg) + kl_div * kl_reg
 
 
 def cost_jef(Xi, params):
@@ -134,6 +134,9 @@ def cost_jef(Xi, params):
 
     # Construct parameterized drift and diffusion functions from libraries and current coefficients
     A_coeff = Xi[: lib_A.shape[0]]
+    # Penalise an equation with non-negative coefficient on largest term
+    if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
+        return np.inf
     A_vals = lib_A.T @ A_coeff
     C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
 
@@ -144,14 +147,58 @@ def cost_jef(Xi, params):
     V /= len(A_vals)  # Norm based on number of bins?
 
     sfp_pdf = sfp.solve(A_vals, C_vals)
-    jef_val = (
-        max(jeffreys_divergence(data_pdf, sfp_pdf, sfp.dx, tol=1e-6), 0.0) * kl_reg
-    )
+    jef_div = max(jeffreys_divergence(data_pdf, sfp_pdf, sfp.dx, tol=1e-6), 0.0)
 
+    return V * (1 - kl_reg) + jef_div * kl_reg
+
+
+def cost_alpha(alpha, params):
+    # Unpack parameters
+    W = params["W"]  # Optimization weights
+
+    # Kramers-Moyal coefficients
+    A_KM = params["A_KM"]
+    C_KM = params["C_KM"]
+
+    lib_A = params["lib_A"]
+    lib_C = params["lib_C"]
+
+    Xi = params["Xi0"] * alpha
+
+    # Construct parameterized drift and diffusion functions from libraries and current coefficients
+    A_coeff = Xi[: lib_A.shape[0]]
     # Penalise an equation with non-negative coefficient on largest term
     if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
         return np.inf
-    return V + jef_val
+    A_vals = lib_A.T @ A_coeff
+    C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
+
+    # Histogram points without data have NaN values in K-M average - ignore these in the average
+    V = np.nansum(W[0] * np.abs((A_vals - A_KM) / A_KM) ** 2) + np.nansum(
+        W[1] * np.abs((C_vals - C_KM) / C_KM) ** 2
+    )
+    V /= len(A_vals)  # Norm based on number of bins?
+
+    return V
+
+
+def cost_just_jef(Xi, params):
+    lib_A = params["lib_A"]
+    lib_C = params["lib_C"]
+
+    data_pdf = params["pdf"]
+    sfp = params["sfp"]
+
+    A_coeff = Xi[: lib_A.shape[0]]
+    if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
+        return np.inf
+    A_vals = lib_A.T @ A_coeff
+    C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
+
+    sfp_pdf = sfp.solve(A_vals, C_vals)
+    jef_div = max(jeffreys_divergence(data_pdf, sfp_pdf, sfp.dx, tol=1e-6), 0.0)
+
+    return jef_div
 
 
 def optimise_function(cost, params, maxfev=1e5):
@@ -165,6 +212,34 @@ def optimise_function(cost, params, maxfev=1e5):
         options={"disp": False, "maxfev": int(maxfev), "adaptive": True},
     )
     return res.x, res.fun
+
+
+def optimise_functions(cost1, cost2, params: dict, maxfev=1e5):
+    """optimise cost1, then cost2,
+    return the parameter of cost1 divided by the parameter of cost2, and cost1 * cost2
+    """
+    Xi0 = params["Xi0"]
+    chi0 = params["chi0"]
+
+    opt_fun = partial(cost1, params=params)
+    res_kl = minimize(
+        opt_fun,
+        Xi0,
+        method="nelder-mead",
+        options={"disp": False, "maxfev": int(maxfev), "adaptive": True},
+    )
+    params["Xi0"] = res_kl.x
+    opt_fun = partial(cost2, params=params)
+    res_moment = minimize(
+        opt_fun,
+        chi0,
+        method="nelder-mead",
+        options={"disp": False, "maxfev": int(maxfev), "adaptive": True},
+    )
+    xi = res_kl.x / res_moment.x
+    v = res_kl.fun * res_moment.fun
+    print(xi, v)
+    return xi, v
 
 
 def SSR_loop(opt_fun, params):
@@ -217,8 +292,8 @@ def SSR_loop(opt_fun, params):
             params["C_expr"] = C_expr[C_active]
             params["lib_A"] = lib_A[A_active]
             params["lib_C"] = lib_C[C_active]
-            tmp_xi0 = Xi0[A_active[-1]]
-            tmp_xi0[A_active[-1]] = -abs(tmp_xi0[A_active[-1]])
+            tmp_xi0 = Xi0
+            tmp_xi0[A_active[-1]] = -abs(tmp_xi0[-1])
             params["Xi0"] = tmp_xi0
 
             # Ensure that there is at least one drift and diffusion term left
