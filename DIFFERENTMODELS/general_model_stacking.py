@@ -537,7 +537,9 @@ def generate_dataseries(models_dir, NUM_MODELS):
         SDE = jitcsde(A, B, n=1, additive=False)
         SDE.set_initial_value([x0])
         x_data = np.fromiter(
-            (SDE.integrate(t)[0] for t in times), dtype=float, count=num_datapoints
+            (SDE.integrate(t)[0] for t in times),  # type:ignore
+            dtype=float,
+            count=num_datapoints,
         )
         assert x_data.shape == (num_datapoints,)
 
