@@ -9,7 +9,7 @@
 #  #SBATCH --exclusive
 
 module purge
-module load development
-module load Intel/MPI/2018.3.222 # May not be needed
+# module load development
+# module load Intel/MPI/2018.3.222 # May not be needed
 
-/eejit/home/zach/miniconda3/envs/langevin/bin/python /eejit/home/zach/LearningSoftglassEqns/Langevin_regression_method/langevin-regression/DIFFERENTMODELS/general_model_stacking.py "$@" --PARALLEL
+/eejit/home/zach/miniconda3/envs/langevin/bin/python /eejit/home/zach/LearningSoftglassEqns/Langevin_regression_method/langevin-regression/DIFFERENTMODELS/general_model_stacking_K1_Alpha.py "$@" --PARALLEL

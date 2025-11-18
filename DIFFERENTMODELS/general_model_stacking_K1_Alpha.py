@@ -19,6 +19,7 @@ from jitcsde import jitcsde, y
 from kramersmoyal import km
 
 from utils import (
+    optimise_function,
     optimise_functions,
     sindy_model,
     kl_divergence,
@@ -27,7 +28,7 @@ from utils import (
     round_array_to_SF,
 )
 from utils_parallel import SSR_loop_parallel
-from utils_stack import cost_alpha_stack, cost_just_jef_stack
+from utils_stack import cost_stack, cost_alpha_stack, cost_just_jef_stack
 
 SCRATCH_PATH = Path(f"/scratch/seismology/zach/softglass/")
 print(f"Running on date: {datetime.datetime.now()}")
@@ -191,7 +192,7 @@ def run_sindy_model(
     params = {
         "Ws": weights,
         "Xi0": Xi0,
-        "chi0": 1.0,
+        "chi0": np.array([1.0]),
         "A_KMs": moment_1s,
         "C_KMs": moment_2s,
         "A_expr": A_lib_expr,
@@ -202,9 +203,17 @@ def run_sindy_model(
         "pdfs": pdfs,
         "kl_reg": kl_reg,
     }
+    # Optimising from the least squares soln to find the pdf is very slow
+    # do one very quick optimisation to get close to the correct pdf
+    Xi0, _ = optimise_function(cost_stack, params)
+    A_coeffs = Xi0[:num_A_expr]
+    A_coeffs[-1] = -np.abs(A_coeffs[-1])
+    Xi0[:num_A_expr] = A_coeffs
+    params["Xi0"] = Xi0
 
-    # if kl_reg > 0:
-    opt_func = partial(optimise_functions, cost_alpha_stack, cost_just_jef_stack)
+    # first fit to the pdf
+    # then scale to the moments
+    opt_func = partial(optimise_functions, cost_just_jef_stack, cost_alpha_stack)
 
     if PARALLEL:
         Xis, costs, active_history = SSR_loop_parallel(opt_func, params)
