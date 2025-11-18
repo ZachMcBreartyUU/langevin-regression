@@ -714,8 +714,6 @@ if __name__ == "__main__":
     coeffs = args.coeffs
     x0 = args.x0
 
-    pth = Path(__file__).parent / "testing"
-    pth.mkdir(exist_ok=True)
     run_sindy_model(
         MODEL_NAME,
         LOG_COST,
@@ -731,7 +729,6 @@ if __name__ == "__main__":
         ep1,
         coeffs,
         x0,
-        folderpath=pth,
         param=r"\phi",
         models_dir="MODELS",
     )
