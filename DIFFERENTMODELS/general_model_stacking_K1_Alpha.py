@@ -244,13 +244,13 @@ def run_sindy_model(
     if np.ndim(C_sindy) == 0:
         C_sindy = np.full_like(centers_sindy, C_sindy)
 
-    print(f"dx = ({A_sym}) dt + ({sympy.sqrt(2.0*C_sym)}) dβ")
+    print(f"dx = ({A_sym}) dt + {sympy.sqrt(2.0*C_sym)} dβ")
 
     chosen_Xi_round = round_array_to_SF(chosen_Xi, 2)
     A_sym_round = sindy_model(chosen_Xi_round[:num_A_expr], A_lib_expr)
     C_sym_round = sindy_model(chosen_Xi_round[num_A_expr:], C_lib_expr)
     print(
-        rf"dx = ({sympy.latex(A_sym_round)}) dt + ({sympy.latex(sympy.sqrt(2.0*C_sym_round))}) d\beta"
+        rf"dx = ({sympy.latex(A_sym_round)}) dt + {sympy.latex(sympy.sqrt(2.0*C_sym_round))} d\beta"
     )
 
     pdf_sindy = sfp.solve(A_sindy, C_sindy)
@@ -333,7 +333,7 @@ def run_sindy_model(
             if np.ndim(C_sindy) == 0:
                 C_sindy = np.full_like(centers_sindy, C_sindy)
 
-            title = rf"$dx = ({sympy.latex(A_sym)}) dt + ({sympy.latex(sympy.sqrt(2.0*C_sym))}) d\beta$"
+            title = rf"$dx = ({sympy.latex(A_sym)}) dt + {sympy.latex(sympy.sqrt(2.0*C_sym))} d\beta$"
             fig_moments_comp, (ax_A_comp, ax_C_comp) = plt.subplots(2)
             ax_A_comp: Axes
             ax_C_comp: Axes
