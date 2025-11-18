@@ -545,7 +545,7 @@ def generate_dataseries(models_dir, NUM_MODELS):
         self_min = np.min(x_data)
         self_max = np.max(x_data)
         metadata["min_x"] = min(metadata["min_x"], self_min)
-        metadata["max_x"] = min(metadata["max_x"], self_max)
+        metadata["max_x"] = max(metadata["max_x"], self_max)
         write_metadata(models_dir, metadata)
         print(f"Saving timeseries {j+1} / {NUM_MODELS}", flush=True)
         np.savez(models_dir / f"timeseries_{j}.npz", times=times, x_data=x_data)
