@@ -388,7 +388,7 @@ def run_sindy_model(
             ax_pdf_comp.legend()
             fig_pdf_comp.tight_layout()
             fig_pdf_comp.savefig(
-                folderpath / f"{MODEL_NAME}_pdf_comparison_sparsity_{sparsity[i]}.png"
+                everymodel / f"{MODEL_NAME}_pdf_comparison_sparsity_{sparsity[i]}.png"
             )
             plt.close(fig_pdf_comp)
     else:
