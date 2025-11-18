@@ -35,7 +35,7 @@ print(f"Running on date: {datetime.datetime.now()}")
 
 
 def run_sindy_model(
-    MODEL_NAME,
+    MODEL_NAME: str,
     LOG_COST=False,
     LARGEST_JUMP=False,
     EVEN_ABS=False,
@@ -44,7 +44,6 @@ def run_sindy_model(
     dt=0.001,
     num_datapoints=10_000_000,
     num_bins=100,
-    kl_reg=0.001,
     ep0=0.2,
     ep1=0.1,
     coeffs=[0.0, -1.0, 0.0, 1.0],
@@ -201,7 +200,6 @@ def run_sindy_model(
         "lib_C": lib_C,
         "sfp": sfp,
         "pdfs": pdfs,
-        "kl_reg": kl_reg,
     }
     # Optimising from the least squares soln to find the pdf is very slow
     # do one very quick optimisation to get close to the correct pdf
@@ -265,13 +263,7 @@ def run_sindy_model(
     pdf_sindy = sfp.solve(A_sindy, C_sindy)
     kl_divs = kl_divergence(pdfs, pdf_sindy, sfp.dx, tol=1e-6)
     kl_div = np.sum(kl_divs[kl_divs > 0])
-    kl_val = kl_div * kl_reg
-    print(f"KL div = {kl_div} * {kl_reg} = {kl_val}")
-    if LOG_COST:
-        init = np.exp(chosen_V)
-        print(f"Raw cost = {np.log((init - kl_val) / kl_reg)}")
-    else:
-        print(f"Raw cost = {(chosen_V - kl_val) / kl_reg}")
+    print(f"KL div = {kl_div}")
 
     ## Plot results
     # Plot cost and dcost OR log(cost) and dlog(cost)
@@ -690,8 +682,7 @@ if __name__ == "__main__":
     df.add_argument("-dt", "--timestep", type=float, default=0.001)
     df.add_argument("-N", "--num-steps", type=int, default=10_000_000)
     df.add_argument("-B", "--num-bins", type=int, default=100)
-    df.add_argument("-k", "--kl-reg", type=float, default=1e-3)
-    df.add_argument("-l", "--lasso", type=float, default=0)
+    df.add_argument("-M", "--MODELS_DIR", type=str, default="MODELS")
 
     int_param_group = df.add_argument_group("Integration Parameters")
     int_param_group.add_argument("--EVEN_ABS", action="store_true")
@@ -715,13 +706,12 @@ if __name__ == "__main__":
     dt = args.timestep
     num_datapoints = args.num_steps
     num_bins = args.num_bins
-    kl_reg = args.kl_reg
-    lasso = args.lasso
     ep0 = args.ep0
     ep1 = args.ep1
 
     coeffs = args.coeffs
     x0 = args.x0
+    MODELS_DIR = args.MODELS_DIR
 
     run_sindy_model(
         MODEL_NAME,
@@ -733,11 +723,10 @@ if __name__ == "__main__":
         dt,
         num_datapoints,
         num_bins,
-        kl_reg,
         ep0,
         ep1,
         coeffs,
         x0,
         param=r"\phi",
-        models_dir="MODELS",
+        models_dir=MODELS_DIR,
     )
