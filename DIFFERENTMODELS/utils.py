@@ -228,17 +228,34 @@ def optimise_functions(cost1, cost2, params: dict, maxfev=1e5):
         method="nelder-mead",
         options={"disp": False, "maxfev": int(maxfev), "adaptive": True},
     )
-    params["Xi0"] = res_kl.x
-    opt_fun = partial(cost2, params=params)
+    if not np.isfinite(res_kl.fun):
+        print("KL regression returned inf")
+        print(params)
+        print(res_kl.x)
+        raise RuntimeError("KL did not regress properly")
+
+    params_cpy = params.copy()
+    params_cpy["Xi0"] = res_kl.x / abs(res_kl.x[0])
+
+    opt_fun2 = partial(cost2, params=params_cpy)
     res_moment = minimize(
-        opt_fun,
+        opt_fun2,
         chi0,
-        method="nelder-mead",
-        options={"disp": False, "maxfev": int(maxfev), "adaptive": True},
+        bounds=[(0, None)],
+        options={"disp": False},
     )
-    xi = res_kl.x / res_moment.x
+    xi = res_kl.x / abs(res_kl.x[0]) * res_moment.x
+    if not np.isfinite(res_moment.fun):
+        print("Moment regression returned inf")
+        print(params_cpy)
+        print("kl x", res_kl.x)
+        print("kl fun", res_kl.fun)
+        print("moment x", res_moment.x)
+        print("moment fun", res_moment.fun)
+        print('xi', xi)
+        raise RuntimeError("KL did not regress properly")
+
     v = res_kl.fun * res_moment.fun
-    print(xi, v)
     return xi, v
 
 
