@@ -174,9 +174,7 @@ def cost_alpha(alpha, params):
     C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
 
     # Histogram points without data have NaN values in K-M average - ignore these in the average
-    V = np.nansum(W[0] * np.abs((A_vals - A_KM) / A_KM) ** 2) + np.nansum(
-        W[1] * np.abs((C_vals - C_KM) / C_KM) ** 2
-    )
+    V = np.nansum(W[0] * (A_vals - A_KM) ** 2 + W[1] * (C_vals - C_KM) ** 2)
     V /= len(A_vals)  # Norm based on number of bins?
 
     return V
@@ -252,7 +250,7 @@ def optimise_functions(cost1, cost2, params: dict, maxfev=1e5):
         print("kl fun", res_kl.fun)
         print("moment x", res_moment.x)
         print("moment fun", res_moment.fun)
-        print('xi', xi)
+        print("xi", xi)
         raise RuntimeError("KL did not regress properly")
 
     v = res_kl.fun * res_moment.fun
