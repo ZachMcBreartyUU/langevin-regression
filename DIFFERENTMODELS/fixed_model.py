@@ -244,6 +244,7 @@ def do_test_parallel(
     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
     target_name=None,
     POOLSIZE=None,
+    seed=None,
 ):
     if target_name is None:
         target_name = target_var
