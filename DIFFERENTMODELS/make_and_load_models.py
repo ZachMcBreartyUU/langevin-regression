@@ -222,3 +222,18 @@ def get_models(
         generate_dataseries(models_dir, NUM_MODELS)
         generate_models(models_dir, NUM_MODELS)
     return load_and_combine_models(models_dir, NUM_MODELS)
+
+
+def generate_parameter_space(models_dirs, target_metadatas, NUM_MODELS=1):
+    for models_dir, target_metadata in zip(models_dirs, target_metadatas):
+        get_models(models_dir, target_metadata, NUM_MODELS)
+
+
+def get_parameter_space(models_dirs, NUM_MODELS=1):
+    """return a list of (stacked) models from specified directories"""
+    stacked_models_list = []
+    for models_dir in models_dirs:
+        metadata = load_metadata(models_dir)
+        stacked_models = get_models(models_dir, metadata, NUM_MODELS)
+        stacked_models_list.append(stacked_models)
+    return stacked_models_list
