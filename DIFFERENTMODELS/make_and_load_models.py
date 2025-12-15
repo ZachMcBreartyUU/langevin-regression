@@ -5,6 +5,7 @@ import os
 from multiprocessing import Pool
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 # data generation and final model integration
 import symengine
@@ -197,11 +198,11 @@ def get_models(
     NUM_MODELS=10,
 ):
     # Check if the models directory exists
-    models_dir.mkdir(exist_ok=True)
+    models_dir.mkdir(parents=True, exist_ok=True)
     #   Check if there is metadata and that it is correct
     if not _check_metadata(models_dir, target_metadata):
         print(
-            "No or incorrect metadata found: generating data, processing, and stacking",
+            f"No or incorrect metadata found in {models_dir}: generating data, processing, and stacking",
             flush=True,
         )
         target_metadata["min_x"] = target_metadata["x0"]
@@ -259,3 +260,25 @@ def delete_timeseries(models_dir: Path, prefix="timeseries"):
             os.remove(models_dir / file)
             print(f"Removed file: {models_dir / file}")
 
+
+def plot_models(models_dir, NUM_MODELS):
+    centers, pdfs, moment_1s, moment_2s = load_and_combine_models(
+        models_dir, NUM_MODELS
+    )
+
+    fig, axes = plt.subplots(3, figsize=(12, 24))
+    axes: list[plt.Axes]  # type: ignore
+    for pdf, moment_1, moment_2 in zip(pdfs, moment_1s, moment_2s):
+        axes[0].scatter(centers, pdf)
+        axes[1].scatter(centers, moment_1)
+        axes[2].scatter(centers, moment_2)
+
+    axes[0].set_xlabel("$x$")
+    axes[1].set_xlabel("$x$")
+    axes[2].set_xlabel("$x$")
+    axes[0].set_ylabel("PDF, $P(x)$")
+    axes[1].set_ylabel("First Moment, $m^{(1)}(x)$")
+    axes[2].set_ylabel("Second Moment, $m^{(2)}(x)$")
+
+    fig.savefig(models_dir / f"model_ALL_pdf_moment.png")
+    plt.close(fig)
