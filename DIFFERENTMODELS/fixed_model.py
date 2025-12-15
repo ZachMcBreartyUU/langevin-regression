@@ -20,7 +20,7 @@ from utils import (
     sindy_model,
     SteadyFP,
 )
-
+from utils import cost_just_jef, cost_alpha, optimise_functions
 from fixed_model_plotting import do_plot, do_load, SCRATCH_PATH
 
 # SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
@@ -90,7 +90,7 @@ def run_fixed_model(
                 arr.append(x_sym**i)
         A_lib_expr = np.array(arr)
     else:
-        A_lib_expr = np.array([x_sym**i for i in range(len(coeffs) + 3)])
+        A_lib_expr = np.array([x_sym**i for i in range(len(coeffs))])
     # print(f"BEFORE FILTER {A_lib_expr=}")
     # ONLY REGRESS ON THE CORRECT TERMS
     A_lib_expr = A_lib_expr[np.nonzero(coeffs)]
@@ -143,7 +143,8 @@ def run_fixed_model(
     }
 
     # opt_func = lambda params: optimise_function(cost_KL, params)
-    xi, cost_val = optimise_function(cost_KL, params)
+    # xi, cost_val = optimise_function(cost_KL, params)
+    xi, cost_val = optimise_functions(cost_just_jef, cost_alpha, params)
 
     # TODO: Could perform some rounding on the found params, e.g. 0.012324 -> 0.012
     A_sym = sindy_model(xi[:num_A_expr], A_lib_expr)
