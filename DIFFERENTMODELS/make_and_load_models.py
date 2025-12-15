@@ -1,6 +1,8 @@
+from functools import partial
 from pathlib import Path
 import json
 import os
+from multiprocessing import Pool
 
 import numpy as np
 
@@ -228,6 +230,16 @@ def get_models(
 def generate_parameter_space(models_dirs, target_metadatas, NUM_MODELS=1):
     for models_dir, target_metadata in zip(models_dirs, target_metadatas):
         get_models(models_dir, target_metadata, NUM_MODELS)
+
+
+def generate_parameter_space_parallel(
+    models_dirs, target_metadatas, NUM_MODELS=1, NUM_CPUS=1
+):
+    with Pool(NUM_CPUS) as pool:
+        pool.starmap(
+            partial(get_models, NUM_MODELS=NUM_MODELS),
+            zip(models_dirs, target_metadatas),
+        )
 
 
 def get_parameter_space(models_dirs, NUM_MODELS=1):
