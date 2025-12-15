@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 
 import numpy as np
 
@@ -237,3 +238,12 @@ def get_parameter_space(models_dirs, NUM_MODELS=1):
         stacked_models = get_models(models_dir, metadata, NUM_MODELS)
         stacked_models_list.append(stacked_models)
     return stacked_models_list
+
+
+def delete_timeseries(models_dir: Path, prefix="timeseries"):
+    files = os.listdir(models_dir)
+    for file in files:
+        if file.startswith(prefix):
+            os.remove(models_dir / file)
+            print(f"Removed file: {models_dir / file}")
+
