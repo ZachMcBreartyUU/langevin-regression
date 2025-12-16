@@ -3,6 +3,7 @@ from time import time
 
 import numpy as np
 from numpy.linalg import lstsq
+import matplotlib.pyplot as plt
 
 # sindy libraries
 import sympy
@@ -197,8 +198,9 @@ def analyse_model_stack_multiple(
     xis = []
     costs = []
     for i in range(num_times):
+        print(f"Starting submodel {i}", flush=True)
         # Regress on fixed terms
-        Xi0 = np.random.random((num_A_expr + num_C_expr))
+        Xi0 = 2 * (np.random.random((num_A_expr + num_C_expr)) - 0.5)
         Xi0[num_A_expr - 1] = -np.abs(Xi0[num_A_expr - 1])
 
         params = {
@@ -225,7 +227,6 @@ def analyse_model_stack_multiple(
         xi, cost_val = optimise_functions(cost_just_jef_stack, cost_alpha_stack, params)
         xis.append(xi)
         costs.append(cost_val)
-
     ## Directly compare True answer to Found answer
     true_model_xi = np.zeros(n_terms)
     true_model_xi[:num_A_expr] = np.array(coeffs)[np.nonzero(coeffs)]
@@ -235,408 +236,295 @@ def analyse_model_stack_multiple(
     return costs, xis, true_model_xi
 
 
+def sweep(
+    first_range,
+    second_range,
+    first_name="ep0",
+    second_name="ep1",
+    generate=True,
+    analyse=True,
+    NUM_MODELS=10,
+    first_log=True,
+    second_log=True,
+    first_label=r"\epsilon_0",
+    second_label=r"\epsilon_1",
+):
+    first_mesh, second_mesh = np.meshgrid(first_range, second_range)
+    first_s = first_mesh.flatten()
+    second_s = second_mesh.flatten()
+    first_second_models_dirs = [
+        SCRATCH_PATH
+        / f"MODELS_{first_name}_{second_name}"
+        / f"MODELS_{first_name}_{first:.3e}_{second_name}_{second:.3e}"
+        for first, second in zip(first_s, second_s)
+    ]
+    target_metadatas = []
+    for first, second in zip(first_s, second_s):
+        tm = default_metadata.copy()
+        coeffs = tm["coeffs"]
+        if first_name in default_metadata.keys():
+            tm[first_name] = first
+        if second_name in default_metadata.keys():
+            tm[second_name] = second
+
+        if first_name == "R":
+            coeffs[1] = first
+        if second_name == "R":
+            coeffs[1] = second
+
+        if second_name == "m_sigma":
+            coeffs[3] = first
+        if second_name == "m_sigma":
+            coeffs[3] = second
+
+        tm["coeffs"] = coeffs
+
+    if generate:
+        generate_parameter_space_parallel(
+            first_second_models_dirs,
+            target_metadatas,
+            NUM_MODELS=NUM_MODELS,
+            NUM_CPUS=NUM_CPUS,
+        )
+        for model_dir in first_second_models_dirs:
+            # plot the found pdf and moments, not the timeseries
+            plot_models(model_dir, NUM_MODELS)
+            # clean up the timeseries (since they are huge!)
+            delete_timeseries(model_dir)
+
+    if analyse:
+        model_stacks = get_parameter_space(first_second_models_dirs, NUM_MODELS=10)
+
+        costs = []
+        xis = []
+        true_xis = []
+        for i, (model_stack, first, second, metadata) in enumerate(
+            zip(model_stacks, first_s, second_s, target_metadatas)
+        ):
+            print(f"model {i}, {first_name}={first:.1e}, {second_name}={second:.1e}")
+            cost, xi, true_xi = analyse_model_stack(
+                model_stack,
+                metadata["EVEN_ABS"],
+                metadata["coeffs"],
+                metadata["ep0"],
+                metadata["ep1"],
+                metadata["num_bins"],
+            )
+            costs.append(cost)
+            xis.append(xi)
+            true_xis.append(true_xi)
+
+        costs = np.asarray(costs).reshape(first_mesh.shape)
+        xis = np.asarray(xis).reshape((*first_mesh.shape, -1))
+        true_xis = np.asarray(true_xis).reshape((*first_mesh.shape, -1))
+
+        if first_log:
+            first_plot_mesh = np.log10(first_mesh)
+        else:
+            first_plot_mesh = first_mesh
+        if second_log:
+            second_plot_mesh = np.log10(second_mesh)
+        else:
+            second_plot_mesh = second_mesh
+        del model_stacks
+        np.savez(
+            SCRATCH_PATH / f"differences_{first_name}_{second_name}.npz",
+            first_plot_mesh=first_plot_mesh,
+            second_plot_mesh=second_plot_mesh,
+            costs=costs,
+            xis=xis,
+            true_xis=true_xis,
+        )
+
+    with np.load(SCRATCH_PATH / f"differences_{first_name}_{second_name}.npz") as f:
+        first_plot_mesh = f["first_plot_mesh"]
+        second_plot_mesh = f["second_plot_mesh"]
+        costs = f["costs"]
+        xis = f["xis"]
+        true_xis = f["true_xis"]
+
+    differences = []
+    differences_A = []
+    differences_C = []
+    diffs = np.abs((xis - true_xis) / true_xis)
+    differences_A = np.sum(diffs[..., :-2], axis=-1)
+    differences_C = np.sum(diffs[..., -2:], axis=-1)
+    differences = differences_A + differences_C
+
+    def plot(C, label, filename):
+        fig, ax = plt.subplots()
+        pcol = ax.pcolor(first_plot_mesh, second_plot_mesh, C)
+        cmap = fig.colorbar(pcol, ax=ax, label=label)
+        if first_log:
+            ax.set_xlabel(rf"$\log {first_label}$")
+        else:
+            ax.set_xlabel(rf"${first_label}$")
+        if second_log:
+            ax.set_ylabel(rf"$\log {second_label}$")
+        else:
+            ax.set_ylabel(rf"${second_label}$")
+        fig.savefig(SCRATCH_PATH / filename)
+        plt.close(fig)
+
+    coeff_names = ["-Rx", r"m(\sigma)x^3", r"-x^3|x|", r"\epsilon_0", r"\epsilon_1 x^2"]
+    # diffs[0, -1] = None
+    for i in range(diffs.shape[-1]):
+        plot(
+            diffs[..., i],
+            rf"$\Delta ({coeff_names[i]})$",
+            f"differences_{i}_{first_name}_{second_name}.png",
+        )
+        plot(
+            np.log10(diffs[..., i]),
+            rf"$\log \Delta ({coeff_names[i]})$",
+            f"log_differences_{i}_{first_name}_{second_name}.png",
+        )
+
+    plot(
+        differences,
+        r"$\Delta$ Coefficients",
+        f"differences_{first_name}_{second_name}.png",
+    )
+    plot(
+        np.log10(differences),
+        r"$\log \Delta$ Coefficients",
+        f"log_differences_{first_name}_{second_name}.png",
+    )
+
+    plot(
+        differences_A,
+        r"$\Delta$ Drift",
+        f"differences_A_{first_name}_{second_name}.png",
+    )
+    plot(
+        np.log10(differences_A),
+        r"$\log \Delta$ Drift",
+        f"log_differences_A_{first_name}_{second_name}.png",
+    )
+
+    plot(
+        differences_C,
+        r"$\Delta$ Diffusion",
+        f"differences_C_{first_name}_{second_name}.png",
+    )
+    plot(
+        np.log10(differences_C),
+        r"$\log \Delta$ Diffusion",
+        f"log_differences_C_{first_name}_{second_name}.png",
+    )
+
+    plot(costs, r"Cost", f"costs_{first_name}_{second_name}.png")
+    plot(np.log10(costs), r"$\log$ Cost", f"log_costs_{first_name}_{second_name}.png")
+
+
 ep0_range = np.logspace(-5, -1, 11)
 ep1_range = np.logspace(-5, -1, 11)
 R_range = np.logspace(-5, 1, 11)
-m_sigma_range = np.linspace(0, 3, 11)
+m_sigma_range = np.linspace(0.01, 3.01, 11)
 
-# ep0_mesh, ep1_mesh = np.meshgrid(ep0_range, ep1_range)
-# ep0s = ep0_mesh.flatten()
-# ep1s = ep1_mesh.flatten()
-# ep0_ep1_models_dirs = [
-#     SCRATCH_PATH / 'MODELS_ep0_ep1' / f"MODELS_ep0_{ep0:.3e}_ep1_{ep1:.3e}" for ep0, ep1 in zip(ep0s, ep1s)
-# ]
-# target_metadatas = [
-#     {
-#         "ep0": ep0,
-#         "ep1": ep1,
-#         "num_datapoints": default_metadata["num_datapoints"],
-#         "dt": default_metadata["dt"],
-#         "EVEN_ABS": default_metadata["EVEN_ABS"],
-#         "coeffs": default_metadata["coeffs"],
-#         "x0": default_metadata["x0"],
-#         "num_bins": default_metadata["num_bins"],
-#     }
-#     for ep0, ep1 in zip(ep0s, ep1s)
-# ]
+ep0_sweep = False
+ep1_sweep = False
+R_sweep = False
+m_sigma_sweep = False
 
-# # generate_parameter_space_parallel(
-# #     ep0_ep1_models_dirs, target_metadatas, NUM_MODELS=10, NUM_CPUS=NUM_CPUS
-# # )
-# # # clean up the timeseries (since they are huge!)
-# # for model_dir in ep0_ep1_models_dirs:
-# #     delete_timeseries(model_dir)
+GENERATE = True
+ANALYSE = True
+NUM_MODELS = 10
 
-# model_stacks = get_parameter_space(ep0_ep1_models_dirs, NUM_MODELS=10)
-
-# costs = []
-# xis = []
-# true_xis = []
-# for i, (model_stack, ep0, ep1) in enumerate(zip(model_stacks, ep0s, ep1s)):
-#     print(f"model {i}, ep0={ep0:.1e}, ep1={ep1:.1e}")
-#     cost, xi, true_xi = analyse_model_stack(
-#         model_stack,
-#         default_metadata["EVEN_ABS"],
-#         default_metadata["coeffs"],
-#         ep0,
-#         ep1,
-#         default_metadata["num_bins"],
-#     )
-#     costs.append(cost)
-#     xis.append(xi)
-#     true_xis.append(true_xi)
-
-# costs = np.asarray(costs).reshape(ep0_mesh.shape)
-# xis = np.asarray(xis).reshape((*ep0_mesh.shape, -1))
-# true_xis = np.asarray(true_xis).reshape((*ep0_mesh.shape, -1))
-
-# log_ep0_mesh = np.log10(ep0_mesh)
-# log_ep1_mesh = np.log10(ep1_mesh)
-# del model_stacks
-# np.savez(
-#     SCRATCH_PATH / "differences.npz",
-#     log_ep0_mesh=log_ep0_mesh,
-#     log_ep1_mesh=log_ep1_mesh,
-#     costs=costs,
-#     xis=xis,
-#     true_xis=true_xis,
-# )
-
-# with np.load(SCRATCH_PATH / "differences.npz") as f:
-#     log_ep0_mesh = f["log_ep0_mesh"]
-#     log_ep1_mesh = f["log_ep1_mesh"]
-#     costs = f["costs"]
-#     xis = f["xis"]
-#     true_xis = f["true_xis"]
-
-# print(log_ep0_mesh.shape)
-# print(log_ep1_mesh.shape)
-# print(costs.shape)
-# print(xis.shape)
-# print(true_xis.shape)
-
-# differences = []
-# differences_A = []
-# differences_C = []
-# diffs = np.abs((xis - true_xis) / true_xis)
-# differences_A = np.sum(diffs[..., :-2], axis=-1)
-# differences_C = np.sum(diffs[..., -2:], axis=-1)
-# differences = differences_A + differences_C
-
-# import matplotlib.pyplot as plt
-
-
-# def plot_ep0_ep1(C, label, filename):
-#     fig, ax = plt.subplots()
-#     pcol = ax.pcolor(log_ep0_mesh, log_ep1_mesh, C)
-#     cmap = fig.colorbar(pcol, ax=ax, label=label)
-#     ax.set_xlabel(r"$\log \epsilon_0$")
-#     ax.set_ylabel(r"$\log \epsilon_1$")
-#     fig.savefig(SCRATCH_PATH / filename)
-#     plt.close(fig)
-
-
-# coeff_names = ["-Rx", r"m(\sigma)x^3", r"-x^3|x|", r"\epsilon_0", r"\epsilon_1 x^2"]
-# # diffs[0, -1] = None
-# for i in range(diffs.shape[-1]):
-#     plot_ep0_ep1(
-#         diffs[..., i], rf"$\Delta ({coeff_names[i]})$", f"differences_{i}_ep0_ep1.png"
-#     )
-#     plot_ep0_ep1(
-#         np.log10(diffs[..., i]),
-#         rf"$\log \Delta ({coeff_names[i]})$",
-#         f"log_differences_{i}_ep0_ep1.png",
-#     )
-
-# plot_ep0_ep1(differences, r"$\Delta$ Coefficients", "differences_ep0_ep1.png")
-# plot_ep0_ep1(
-#     np.log10(differences), r"$\log \Delta$ Coefficients", "log_differences_ep0_ep1.png"
-# )
-
-# plot_ep0_ep1(differences_A, r"$\Delta$ Drift", "differences_A_ep0_ep1.png")
-# plot_ep0_ep1(
-#     np.log10(differences_A), r"$\log \Delta$ Drift", "log_differences_A_ep0_ep1.png"
-# )
-
-# plot_ep0_ep1(differences_C, r"$\Delta$ Diffusion", "differences_C_ep0_ep1.png")
-# plot_ep0_ep1(
-#     np.log10(differences_C), r"$\log \Delta$ Diffusion", "log_differences_C_ep0_ep1.png"
-# )
-
-# plot_ep0_ep1(costs, r"Cost", "costs_ep0_ep1.png")
-# plot_ep0_ep1(np.log10(costs), r"$\log$ Cost", "log_costs_ep0_ep1.png")
-#################
-# R_range = np.logspace(-5, 1, 11)
-# ep1_range = np.logspace(-5, -1, 11)
-# R_mesh, ep1_mesh = np.meshgrid(R_range, ep1_range)
-# Rs = R_mesh.flatten()
-# ep1s = ep1_mesh.flatten()
-# R_ep1_models_dirs = [
-#     SCRATCH_PATH / "MODELS_R_ep1" / f"MODELS_R_{R:.3e}_ep1_{ep1:.3e}"
-#     for R, ep1 in zip(Rs, ep1s)
-# ]
-# target_metadatas = [
-#     {
-#         "coeffs": [0.0, -R, 0.0, 1.0, -1.0],
-#         "ep1": ep1,
-#         "ep0": default_metadata["ep0"],
-#         "num_datapoints": default_metadata["num_datapoints"],
-#         "dt": default_metadata["dt"],
-#         "EVEN_ABS": default_metadata["EVEN_ABS"],
-#         "x0": default_metadata["x0"],
-#         "num_bins": default_metadata["num_bins"],
-#     }
-#     for R, ep1 in zip(Rs, ep1s)
-# ]
-
-# # generate_parameter_space_parallel(
-# #     R_ep1_models_dirs, target_metadatas, NUM_MODELS=10, NUM_CPUS=NUM_CPUS
-# # )
-
-# for model_dir in R_ep1_models_dirs:
-#     # plot the found pdf and moments, not the timeseries
-#     plot_models(model_dir, 10)
-#     # clean up the timeseries (since they are huge!)
-#     # delete_timeseries(model_dir)
-
-# # model_stacks = get_parameter_space(R_ep1_models_dirs, NUM_MODELS=10)
-
-# # costs = []
-# # xis = []
-# # true_xis = []
-# # for i, (model_stack, R, ep1) in enumerate(zip(model_stacks, Rs, ep1s)):
-# #     print(f"model {i}, R={R:.1e}, ep1={ep1:.1e}")
-# #     cost, xi, true_xi = analyse_model_stack(
-# #         model_stack,
-# #         default_metadata["EVEN_ABS"],
-# #         [0.0, -R, 0.0, 1.0, -1.0],
-# #         default_metadata["ep0"],
-# #         ep1,
-# #         default_metadata["num_bins"],
-# #     )
-# #     costs.append(cost)
-# #     xis.append(xi)
-# #     true_xis.append(true_xi)
-
-# # costs = np.asarray(costs).reshape(R_mesh.shape)
-# # xis = np.asarray(xis).reshape((*R_mesh.shape, -1))
-# # true_xis = np.asarray(true_xis).reshape((*R_mesh.shape, -1))
-
-# # log_R_mesh = np.log10(R_mesh)
-# # log_ep1_mesh = np.log10(ep1_mesh)
-# # del model_stacks
-# # np.savez(
-# #     SCRATCH_PATH / "differences.npz",
-# #     log_R_mesh=log_R_mesh,
-# #     log_ep1_mesh=log_ep1_mesh,
-# #     costs=costs,
-# #     xis=xis,
-# #     true_xis=true_xis,
-# # )
-
-# # with np.load(SCRATCH_PATH / "differences.npz") as f:
-# #     log_R_mesh = f["log_R_mesh"]
-# #     log_ep1_mesh = f["log_ep1_mesh"]
-# #     costs = f["costs"]
-# #     xis = f["xis"]
-# #     true_xis = f["true_xis"]
-
-# # print(log_R_mesh.shape)
-# # print(log_ep1_mesh.shape)
-# # print(costs.shape)
-# # print(xis.shape)
-# # print(true_xis.shape)
-
-# # differences = []
-# # differences_A = []
-# # differences_C = []
-# # diffs = np.abs((xis - true_xis) / true_xis)
-# # differences_A = np.sum(diffs[..., :-2], axis=-1)
-# # differences_C = np.sum(diffs[..., -2:], axis=-1)
-# # differences = differences_A + differences_C
-
-# # import matplotlib.pyplot as plt
-
-
-# # def plot_R_ep1(C, label, filename):
-# #     fig, ax = plt.subplots()
-# #     pcol = ax.pcolor(log_R_mesh, log_ep1_mesh, C)
-# #     cmap = fig.colorbar(pcol, ax=ax, label=label)
-# #     ax.set_xlabel(r"$\log R$")
-# #     ax.set_ylabel(r"$\log \epsilon_1$")
-# #     fig.savefig(SCRATCH_PATH / filename)
-# #     plt.close(fig)
-
-
-# # coeff_names = ["-Rx", r"m(\sigma)x^3", r"-x^3|x|", r"\epsilon_0", r"\epsilon_1 x^2"]
-# # # diffs[0, -1] = None
-# # for i in range(diffs.shape[-1]):
-# #     plot_R_ep1(
-# #         diffs[..., i], rf"$\Delta ({coeff_names[i]})$", f"differences_{i}_R_ep1.png"
-# #     )
-# #     plot_R_ep1(
-# #         np.log10(diffs[..., i]),
-# #         rf"$\log \Delta ({coeff_names[i]})$",
-# #         f"log_differences_{i}_R_ep1.png",
-# #     )
-
-# # plot_R_ep1(differences, r"$\Delta$ Coefficients", "differences_R_ep1.png")
-# # plot_R_ep1(
-# #     np.log10(differences), r"$\log \Delta$ Coefficients", "log_differences_R_ep1.png"
-# # )
-
-# # plot_R_ep1(differences_A, r"$\Delta$ Drift", "differences_A_R_ep1.png")
-# # plot_R_ep1(
-# #     np.log10(differences_A), r"$\log \Delta$ Drift", "log_differences_A_R_ep1.png"
-# # )
-
-# # plot_R_ep1(differences_C, r"$\Delta$ Diffusion", "differences_C_R_ep1.png")
-# # plot_R_ep1(
-# #     np.log10(differences_C), r"$\log \Delta$ Diffusion", "log_differences_C_R_ep1.png"
-# # )
-
-# # plot_R_ep1(costs, r"Cost", "costs_R_ep1.png")
-# # plot_R_ep1(np.log10(costs), r"$\log$ Cost", "log_costs_R_ep1.png")
-#####################
-
-m_sigma_mesh, ep1_mesh = np.meshgrid(m_sigma_range, ep1_range)
-m_sigma_s = m_sigma_mesh.flatten()
-ep1s = ep1_mesh.flatten()
-m_sigma_ep1_models_dirs = [
-    SCRATCH_PATH / "MODELS_m_sigma_ep1" / f"MODELS_m_sigma_{m_sigma:.3e}_ep1_{ep1:.3e}"
-    for m_sigma, ep1 in zip(m_sigma_s, ep1s)
-]
-target_metadatas = [
-    {
-        "coeffs": [0.0, -0.016, 0.0, m_sigma, -1.0],
-        "ep1": ep1,
-        "ep0": default_metadata["ep0"],
-        "num_datapoints": default_metadata["num_datapoints"],
-        "dt": default_metadata["dt"],
-        "EVEN_ABS": default_metadata["EVEN_ABS"],
-        "x0": default_metadata["x0"],
-        "num_bins": default_metadata["num_bins"],
-    }
-    for m_sigma, ep1 in zip(m_sigma_s, ep1s)
-]
-
-generate_parameter_space_parallel(
-    m_sigma_ep1_models_dirs, target_metadatas, NUM_MODELS=10, NUM_CPUS=NUM_CPUS
-)
-
-for model_dir in m_sigma_ep1_models_dirs:
-    # plot the found pdf and moments, not the timeseries
-    plot_models(model_dir, 10)
-    # clean up the timeseries (since they are huge!)
-    delete_timeseries(model_dir)
-
-model_stacks = get_parameter_space(m_sigma_ep1_models_dirs, NUM_MODELS=10)
-
-costs = []
-costs_var = []
-xis = []
-xis_var = []
-true_xis = []
-for i, (model_stack, m_sigma, ep1) in enumerate(zip(model_stacks, m_sigma_s, ep1s)):
-    print(f"model {i}, R={m_sigma:.1e}, ep1={ep1:.1e}")
-    cost, xi, true_xi = analyse_model_stack_multiple(
-        model_stack,
-        default_metadata["EVEN_ABS"],
-        [0.0, -0.016, 0.0, m_sigma, -1.0],
-        default_metadata["ep0"],
-        ep1,
-        default_metadata["num_bins"],
+# The ordering of the following is arbitrary,
+# and actually out of order if you look closely
+# This is mostly due to a lack of foresight
+if ep0_sweep:
+    if ep1_sweep:
+        sweep(
+            ep0_range,
+            ep1_range,
+            "ep0",
+            "ep1",
+            GENERATE,
+            ANALYSE,
+            NUM_MODELS,
+            True,
+            True,
+            r"\epsilon_0",
+            r"\epsilon_1",
+        )
+    elif R_sweep:
+        sweep(
+            ep0_range,
+            R_range,
+            "ep0",
+            "R",
+            GENERATE,
+            ANALYSE,
+            NUM_MODELS,
+            True,
+            True,
+            r"\epsilon_0",
+            r"R",
+        )
+    elif m_sigma_sweep:
+        sweep(
+            m_sigma_range,
+            ep0_range,
+            "m_sigma",
+            "ep0",
+            GENERATE,
+            ANALYSE,
+            NUM_MODELS,
+            True,
+            True,
+            r"m(\sigma)",
+            r"\epsilon_0",
+        )
+    else:
+        raise ValueError("only got ep0 :(")
+elif ep1_sweep:
+    if R_sweep:
+        sweep(
+            R_range,
+            ep1_range,
+            "R",
+            "ep1",
+            GENERATE,
+            ANALYSE,
+            NUM_MODELS,
+            True,
+            True,
+            r"R",
+            r"\epsilon_1",
+        )
+    elif m_sigma_sweep:
+        sweep(
+            m_sigma_range,
+            ep1_range,
+            "m_sigma",
+            "ep1",
+            GENERATE,
+            ANALYSE,
+            NUM_MODELS,
+            False,
+            True,
+            r"m(\sigma)",
+            r"\epsilon_1",
+        )
+    else:
+        raise ValueError("only got ep1 :(")
+elif R_sweep and m_sigma_sweep:
+    sweep(
+        R_range,
+        m_sigma_range,
+        "R",
+        "m_sigma",
+        GENERATE,
+        ANALYSE,
+        NUM_MODELS,
+        True,
+        False,
+        r"R",
+        r"m(\sigma)",
     )
-    costs.append(np.mean(cost))
-    costs_var.append(np.var(cost))
-    xis.append(np.mean(xis, axis=0))
-    xis_var.append(np.var(xis, axis=0))
-    true_xis.append(true_xi)
-
-costs = np.asarray(costs).reshape(m_sigma_mesh.shape)
-costs_var = np.asarray(costs_var).reshape(m_sigma_mesh.shape)
-xis = np.asarray(xis).reshape((*m_sigma_mesh.shape, -1))
-xis_var = np.asarray(xis_var).reshape((*m_sigma_mesh.shape, -1))
-true_xis = np.asarray(true_xis).reshape((*m_sigma_mesh.shape, -1))
-
-log_ep1_mesh = np.log10(ep1_mesh)
-del model_stacks
-np.savez(
-    SCRATCH_PATH / "differences.npz",
-    m_sigma_mesh=m_sigma_mesh,
-    log_ep1_mesh=log_ep1_mesh,
-    costs=costs,
-    costs_var=costs_var,
-    xis=xis,
-    xis_var=xis_var,
-    true_xis=true_xis,
-)
-
-with np.load(SCRATCH_PATH / "differences.npz") as f:
-    m_sigma_mesh = f["m_sigma_mesh"]
-    log_ep1_mesh = f["log_ep1_mesh"]
-    costs = f["costs"]
-    costs_var = f["costs_var"]
-    xis = f["xis"]
-    xis_var = f["xis_var"]
-    true_xis = f["true_xis"]
-
-print(m_sigma_mesh.shape)
-print(log_ep1_mesh.shape)
-print(costs.shape)
-print(costs_var.shape)
-print(xis.shape)
-print(xis_var.shape)
-print(true_xis.shape)
-
-differences = []
-differences_A = []
-differences_C = []
-diffs = np.abs((xis - true_xis) / true_xis)
-differences_A = np.sum(diffs[..., :-2], axis=-1)
-differences_C = np.sum(diffs[..., -2:], axis=-1)
-differences = differences_A + differences_C
-
-import matplotlib.pyplot as plt
-
-
-def plot_m_sigma_ep1(C, label, filename):
-    fig, ax = plt.subplots()
-    pcol = ax.pcolor(m_sigma_mesh, log_ep1_mesh, C)
-    cmap = fig.colorbar(pcol, ax=ax, label=label)
-    ax.set_xlabel(r"$m(\sigma)$")
-    ax.set_ylabel(r"$\log \epsilon_1$")
-    fig.savefig(SCRATCH_PATH / filename)
-    plt.close(fig)
-
-
-coeff_names = ["-Rx", r"m(\sigma)x^3", r"-x^3|x|", r"\epsilon_0", r"\epsilon_1 x^2"]
-for i in range(diffs.shape[-1]):
-    plot_m_sigma_ep1(
-        diffs[..., i], rf"$\Delta ({coeff_names[i]})$", f"differences_{i}_R_ep1.png"
-    )
-    plot_m_sigma_ep1(
-        np.log10(diffs[..., i]),
-        rf"$\log \Delta ({coeff_names[i]})$",
-        f"log_differences_{i}_R_ep1.png",
-    )
-
-plot_m_sigma_ep1(differences, r"$\Delta$ Coefficients", "differences_R_ep1.png")
-plot_m_sigma_ep1(
-    np.log10(differences), r"$\log \Delta$ Coefficients", "log_differences_R_ep1.png"
-)
-
-plot_m_sigma_ep1(differences_A, r"$\Delta$ Drift", "differences_A_R_ep1.png")
-plot_m_sigma_ep1(
-    np.log10(differences_A), r"$\log \Delta$ Drift", "log_differences_A_R_ep1.png"
-)
-
-plot_m_sigma_ep1(differences_C, r"$\Delta$ Diffusion", "differences_C_R_ep1.png")
-plot_m_sigma_ep1(
-    np.log10(differences_C), r"$\log \Delta$ Diffusion", "log_differences_C_R_ep1.png"
-)
-
-plot_m_sigma_ep1(costs, r"Cost", "costs_R_ep1.png")
-plot_m_sigma_ep1(np.log10(costs), r"$\log$ Cost", "log_costs_R_ep1.png")
+else:
+    raise ValueError("Got none :(")
 
 print("DONE")
