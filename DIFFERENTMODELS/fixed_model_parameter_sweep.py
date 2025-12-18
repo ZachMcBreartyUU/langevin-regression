@@ -1,18 +1,14 @@
-from typing import Optional
-from time import time
-
+from functools import partial
 import numpy as np
 from numpy.linalg import lstsq
 import matplotlib.pyplot as plt
+from multiprocessing import Pool
 
 # sindy libraries
 import sympy
 
 # data generation and final model integration
 import symengine
-from jitcsde import jitcsde, y
-
-from kramersmoyal import km
 
 from utils import (
     optimise_function,
@@ -236,6 +232,19 @@ def analyse_model_stack_multiple(
     return costs, xis, true_model_xi
 
 
+def amsm_metadata(i, first, second, model_stack, metadata, num_times):
+    print(f"Starting model {i} with {first} and {second}", flush=True)
+    return analyse_model_stack_multiple(
+        model_stack,
+        metadata["EVEN_ABS"],
+        metadata["coeffs"],
+        metadata["ep0"],
+        metadata["ep1"],
+        metadata["num_bins"],
+        num_times=num_times,
+    )
+
+
 def sweep(
     first_range,
     second_range,
@@ -248,7 +257,9 @@ def sweep(
     second_log=True,
     first_label=r"\epsilon_0",
     second_label=r"\epsilon_1",
+    num_times=10,
 ):
+    print(f"Starting sweep of {first_name} and {second_name}", flush=True)
     first_mesh, second_mesh = np.meshgrid(first_range, second_range)
     first_s = first_mesh.flatten()
     second_s = second_mesh.flatten()
@@ -258,6 +269,9 @@ def sweep(
         / f"MODELS_{first_name}_{first:.3e}_{second_name}_{second:.3e}"
         for first, second in zip(first_s, second_s)
     ]
+    print(
+        f'Setting model path as {SCRATCH_PATH / f"MODELS_{first_name}_{second_name}"}'
+    )
     target_metadatas = []
     for first, second in zip(first_s, second_s):
         tm = default_metadata.copy()
@@ -278,8 +292,10 @@ def sweep(
             coeffs[3] = second
 
         tm["coeffs"] = coeffs
+        target_metadatas.append(tm)
 
     if generate:
+        print(f"Generating parameter space", flush=True)
         generate_parameter_space_parallel(
             first_second_models_dirs,
             target_metadatas,
@@ -293,29 +309,36 @@ def sweep(
             delete_timeseries(model_dir)
 
     if analyse:
+        print(f"Analysing parameter space", flush=True)
         model_stacks = get_parameter_space(first_second_models_dirs, NUM_MODELS=10)
-
-        costs = []
-        xis = []
-        true_xis = []
-        for i, (model_stack, first, second, metadata) in enumerate(
-            zip(model_stacks, first_s, second_s, target_metadatas)
-        ):
-            print(f"model {i}, {first_name}={first:.1e}, {second_name}={second:.1e}")
-            cost, xi, true_xi = analyse_model_stack(
-                model_stack,
-                metadata["EVEN_ABS"],
-                metadata["coeffs"],
-                metadata["ep0"],
-                metadata["ep1"],
-                metadata["num_bins"],
+        with Pool(NUM_CPUS) as pool:
+            results = pool.starmap(
+                partial(amsm_metadata, num_times=num_times),
+                zip(
+                    range(len(model_stacks)),
+                    first_s,
+                    second_s,
+                    model_stacks,
+                    target_metadatas,
+                ),
             )
-            costs.append(cost)
-            xis.append(xi)
+        costs = []
+        costs_var = []
+        xis = []
+        xis_var = []
+        true_xis = []
+        for result in results:
+            costz, xiz, true_xi = result
+            costs.append(np.mean(costz, axis=0))
+            costs_var.append(np.var(costz, axis=0))
+            xis.append(np.mean(xiz, axis=0))
+            xis_var.append(np.var(xiz, axis=0))
             true_xis.append(true_xi)
 
         costs = np.asarray(costs).reshape(first_mesh.shape)
+        costs_var = np.asarray(costs_var).reshape(first_mesh.shape)
         xis = np.asarray(xis).reshape((*first_mesh.shape, -1))
+        xis_var = np.asarray(xis_var).reshape((*first_mesh.shape, -1))
         true_xis = np.asarray(true_xis).reshape((*first_mesh.shape, -1))
 
         if first_log:
@@ -332,7 +355,9 @@ def sweep(
             first_plot_mesh=first_plot_mesh,
             second_plot_mesh=second_plot_mesh,
             costs=costs,
+            costs_var=costs_var,
             xis=xis,
+            xis_var=xis_var,
             true_xis=true_xis,
         )
 
@@ -340,7 +365,9 @@ def sweep(
         first_plot_mesh = f["first_plot_mesh"]
         second_plot_mesh = f["second_plot_mesh"]
         costs = f["costs"]
+        costs_var = f["costs_var"]
         xis = f["xis"]
+        xis_var = f["xis_var"]
         true_xis = f["true_xis"]
 
     differences = []
@@ -372,7 +399,7 @@ def sweep(
         plt.close(fig)
 
     coeff_names = ["-Rx", r"m(\sigma)x^3", r"-x^3|x|", r"\epsilon_0", r"\epsilon_1 x^2"]
-    # diffs[0, -1] = None
+
     for i in range(diffs.shape[-1]):
         plot(
             diffs[..., i],
@@ -427,19 +454,58 @@ ep1_range = np.logspace(-5, -1, 11)
 R_range = np.logspace(-5, 1, 11)
 m_sigma_range = np.linspace(0.01, 3.01, 11)
 
-ep0_sweep = False
+num_bins_range = np.linspace(100, 2000, 11)
+dt_range = np.logspace(10**-5, 10**-1, 11)
+
+singularis = np.array([0.0])
+
+ep0_sweep = True
 ep1_sweep = False
-R_sweep = False
+R_sweep = True
 m_sigma_sweep = False
 
-GENERATE = True
-ANALYSE = True
+num_bins_sweep = False
+dt_sweep = False
+
+singular_sweep = False
+
+GENERATE = False
+ANALYSE = False
 NUM_MODELS = 10
 
 # The ordering of the following is arbitrary,
 # and actually out of order if you look closely
 # This is mostly due to a lack of foresight
-if ep0_sweep:
+# TODO: Fill out sweeps, perform sweeps (if interesting!)
+if singular_sweep:
+    # only sweeping over one thing
+    if ep0_sweep:
+        sweep(
+            ep0_range,
+            singularis,
+            "ep0",
+            "",
+            GENERATE,
+            ANALYSE,
+            NUM_MODELS,
+            True,
+            False,
+            r"\epsilon_0",
+            "",
+        )
+    elif ep1_sweep:
+        pass
+    elif R_sweep:
+        pass
+    elif m_sigma_sweep:
+        pass
+    elif num_bins_sweep:
+        pass
+    elif dt_sweep:
+        pass
+    else:
+        raise ValueError("None selected for singular sweep :(")
+elif ep0_sweep:
     if ep1_sweep:
         sweep(
             ep0_range,
@@ -477,11 +543,15 @@ if ep0_sweep:
             GENERATE,
             ANALYSE,
             NUM_MODELS,
-            True,
+            False,
             True,
             r"m(\sigma)",
             r"\epsilon_0",
         )
+    elif num_bins_sweep:
+        pass
+    elif dt_sweep:
+        pass
     else:
         raise ValueError("only got ep0 :(")
 elif ep1_sweep:
@@ -513,22 +583,40 @@ elif ep1_sweep:
             r"m(\sigma)",
             r"\epsilon_1",
         )
+    elif num_bins_sweep:
+        pass
+    elif dt_sweep:
+        pass
     else:
         raise ValueError("only got ep1 :(")
-elif R_sweep and m_sigma_sweep:
-    sweep(
-        R_range,
-        m_sigma_range,
-        "R",
-        "m_sigma",
-        GENERATE,
-        ANALYSE,
-        NUM_MODELS,
-        True,
-        False,
-        r"R",
-        r"m(\sigma)",
-    )
+elif R_sweep:
+    if m_sigma_sweep:
+        sweep(
+            R_range,
+            m_sigma_range,
+            "R",
+            "m_sigma",
+            GENERATE,
+            ANALYSE,
+            NUM_MODELS,
+            True,
+            False,
+            r"R",
+            r"m(\sigma)",
+        )
+    elif num_bins_sweep:
+        pass
+    elif dt_sweep:
+        pass
+    else:
+        raise ValueError("only got R :(")
+elif num_bins_sweep:
+    if dt_sweep:
+        pass
+    else:
+        raise ValueError("only got num_bins :(")
+elif dt_sweep:
+    raise ValueError("Only got dt :(")
 else:
     raise ValueError("Got none :(")
 
