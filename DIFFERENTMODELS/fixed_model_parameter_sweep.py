@@ -363,7 +363,12 @@ def sweep(
             ax.set_ylabel(rf"$\log {second_label}$")
         else:
             ax.set_ylabel(rf"${second_label}$")
-        fig.savefig(SCRATCH_PATH / filename)
+        (SCRATCH_PATH / f"MODELS_{first_name}_{second_name}_plots").mkdir(
+            parents=True, exist_ok=True
+        )
+        fig.savefig(
+            SCRATCH_PATH / f"MODELS_{first_name}_{second_name}_plots" / filename
+        )
         plt.close(fig)
 
     coeff_names = ["-Rx", r"m(\sigma)x^3", r"-x^3|x|", r"\epsilon_0", r"\epsilon_1 x^2"]
