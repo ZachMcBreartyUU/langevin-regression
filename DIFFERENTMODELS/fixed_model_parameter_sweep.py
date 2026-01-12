@@ -378,6 +378,39 @@ def sweep(
     differences_C = np.sum(diffs[..., -2:], axis=-1)
     differences = differences_A + differences_C
 
+    eval_num_bins = 100 
+    eval_centers = np.linspace(-3, 3, eval_num_bins)
+
+    x_sym = sympy.symbols("x")
+
+    A_lib_expr = np.array([x_sym, x_sym**3, x_sym**3 * symengine.Abs(x_sym)])
+    num_A_expr = len(A_lib_expr)
+
+    eval_A_true = np.zeros((*first_plot_mesh.shape, eval_num_bins))
+    eval_A = np.zeros((*first_plot_mesh.shape, eval_num_bins))
+    for k in range(num_A_expr):
+        lamb_expr = sympy.lambdify(x_sym, A_lib_expr[k])
+        eval_A_true += true_xis[:, :, k][:, :, None] * lamb_expr(eval_centers)
+        eval_A += xis[:, :, k][:, :, None] * lamb_expr(eval_centers)
+
+    eval_A_diffs = np.nansum((eval_A_true - eval_A) ** 2, axis=-1) / eval_num_bins
+
+    C_lib_expr = np.array([x_sym**0, x_sym**2])
+    num_C_expr = len(C_lib_expr)
+
+    eval_C_true = np.zeros((*first_plot_mesh.shape, eval_num_bins))
+    eval_C = np.zeros((*first_plot_mesh.shape, eval_num_bins))
+    true_eps = true_xis[:, :, -2:]
+    eps = xis[:, :, -2:]
+    for k in range(num_C_expr):
+        lamb_expr = sympy.lambdify(x_sym, C_lib_expr[k])
+        eval_C_true += true_eps[:, :, k][:, :, None] * lamb_expr(eval_centers)
+        eval_C += eps[:, :, k][:, :, None] * lamb_expr(eval_centers)
+
+    eval_C_diffs = np.nansum((eval_C_true - eval_C) ** 2, axis=-1) / eval_num_bins
+
+    eval_diffs = eval_A_diffs + eval_C_diffs
+
     def plot(C, label, filename):
         fig, ax = plt.subplots()
         pcol = ax.pcolor(first_plot_mesh, second_plot_mesh, C)
@@ -447,6 +480,15 @@ def sweep(
 
     plot(costs, r"Cost", f"costs_{first_name}_{second_name}.png")
     plot(np.log10(costs), r"$\log$ Cost", f"log_costs_{first_name}_{second_name}.png")
+
+    plot(
+        eval_diffs, r"Evaluate Differences", f"eval_diff_{first_name}_{second_name}.png"
+    )
+    plot(
+        np.log10(eval_diffs),
+        r"$\log$ Evaluate Differences",
+        f"log_eval_diff_{first_name}_{second_name}.png",
+    )
 
 
 ep0_range = np.logspace(-5, -1, 11)
