@@ -323,22 +323,22 @@ def sweep(
                 ),
             )
         costs = []
-        costs_var = []
+        costs_variance = []
         xis = []
-        xis_var = []
+        xis_variance = []
         true_xis = []
         for result in results:
             costz, xiz, true_xi = result
             costs.append(np.mean(costz, axis=0))
-            costs_var.append(np.var(costz, axis=0))
+            costs_variance.append(np.var(costz, axis=0))
             xis.append(np.mean(xiz, axis=0))
-            xis_var.append(np.var(xiz, axis=0))
+            xis_variance.append(np.var(xiz, axis=0))
             true_xis.append(true_xi)
 
         costs = np.asarray(costs).reshape(first_mesh.shape)
-        costs_var = np.asarray(costs_var).reshape(first_mesh.shape)
+        costs_variance = np.asarray(costs_variance).reshape(first_mesh.shape)
         xis = np.asarray(xis).reshape((*first_mesh.shape, -1))
-        xis_var = np.asarray(xis_var).reshape((*first_mesh.shape, -1))
+        xis_variance = np.asarray(xis_variance).reshape((*first_mesh.shape, -1))
         true_xis = np.asarray(true_xis).reshape((*first_mesh.shape, -1))
 
         if first_log:
@@ -355,9 +355,9 @@ def sweep(
             first_plot_mesh=first_plot_mesh,
             second_plot_mesh=second_plot_mesh,
             costs=costs,
-            costs_var=costs_var,
+            costs_var=costs_variance,
             xis=xis,
-            xis_var=xis_var,
+            xis_var=xis_variance,
             true_xis=true_xis,
         )
 
@@ -365,9 +365,9 @@ def sweep(
         first_plot_mesh = f["first_plot_mesh"]
         second_plot_mesh = f["second_plot_mesh"]
         costs = f["costs"]
-        costs_var = f["costs_var"]
+        costs_variance = f["costs_var"]
         xis = f["xis"]
-        xis_var = f["xis_var"]
+        xis_variance = f["xis_var"]
         true_xis = f["true_xis"]
 
     differences = []
