@@ -178,3 +178,46 @@ def cost_alpha_stack(alpha, params):
     V /= len(A_vals)  # Norm based on number of bins?
 
     return V
+
+
+def cost_enforce_eqn_stack(Xi, params):
+    lib_A = params["lib_A"]
+    lib_C = params["lib_C"]
+
+    A_KMs = params["A_KMs"]
+    C_KMs = params["C_KMs"]
+
+    data_pdfs = params["pdfs"]
+    K = params["enforce_fraction"]
+
+    A_coeff = Xi[: lib_A.shape[0]]
+    if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
+        return np.inf
+    A_vals = lib_A.T @ A_coeff
+    C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
+
+    A_pdf = A_vals * data_pdfs
+    C_pdf = C_vals * data_pdfs
+
+    Q_hat = np.fft.fft(A_pdf)
+    R_hat = np.fft.fft(C_pdf)
+
+    k = 2 * np.pi * np.fft.fftfreq(len(A_pdf[0]), params["dx"])
+
+    FP_hat = 1.0j * k * Q_hat + R_hat * k**2 / 2
+
+    FP = np.fft.ifft(FP_hat)
+
+    moment_fidelity = np.nansum(
+        (A_vals - A_KMs) ** 2 + (C_vals - C_KMs) ** 2
+    ) / np.prod(np.shape(A_KMs))
+    equation_constraint = np.nansum(np.abs(FP))
+
+    print("m", moment_fidelity)
+    print("e", equation_constraint)
+
+    print("(1-k) m", (1 - K) * moment_fidelity)
+    print("k e", K * equation_constraint)
+    print(flush=True)
+
+    return (1 - K) * moment_fidelity + K * equation_constraint
