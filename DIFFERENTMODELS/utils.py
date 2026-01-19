@@ -168,7 +168,7 @@ def cost_alpha(alpha, params):
     # Construct parameterized drift and diffusion functions from libraries and current coefficients
     A_coeff = Xi[: lib_A.shape[0]]
     # Penalise an equation with non-negative coefficient on largest term
-    if A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
+    if alpha > 0 and A_coeff[np.nonzero(A_coeff)[0][-1]] > 0:
         return np.inf
     A_vals = lib_A.T @ A_coeff
     C_vals = lib_C.T @ Xi[lib_A.shape[0] :]
