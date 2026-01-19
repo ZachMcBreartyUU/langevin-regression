@@ -21,9 +21,121 @@ from utils import (
     SteadyFP,
 )
 from utils import cost_just_jef, cost_alpha, optimise_functions
+from utils_stack import cost_just_jef_stack, cost_alpha_stack, cost_stack
 from fixed_model_plotting import do_plot, do_load, SCRATCH_PATH
 
+from make_and_load_models import get_models
+
 # SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
+
+
+def analyse_model_stack(
+    model_stack,
+    EVEN_ABS=True,
+    coeffs=[0, -0.016, 0, 2, -1],
+    ep0=1e-5,
+    ep1=0.1,
+    num_bins=100,
+):
+    centers, pdf_stack, moment_1_stack, moment_2_stack = model_stack
+
+    x_sym = sympy.symbols("x")
+
+    if EVEN_ABS:
+        arr = []
+        for i in range(len(coeffs)):
+            if i % 2 == 0 and i != 0:
+                arr.append(x_sym ** (i - 1) * symengine.Abs(x_sym))
+            else:
+                arr.append(x_sym**i)
+        A_lib_expr = np.array(arr)
+    else:
+        A_lib_expr = np.array([x_sym**i for i in range(len(coeffs))])
+    A_lib_expr = A_lib_expr[np.nonzero(coeffs)]
+    num_A_expr = len(A_lib_expr)
+
+    lib_A = np.empty((num_A_expr, num_bins))
+    for k in range(num_A_expr):
+        lamb_expr = sympy.lambdify(x_sym, A_lib_expr[k])
+        lib_A[k] = lamb_expr(centers)
+
+    C_lib_expr = np.array([x_sym**0, x_sym**2])
+    num_C_expr = len(C_lib_expr)
+
+    lib_C = np.empty((num_C_expr, num_bins))
+    for k in range(num_C_expr):
+        lamb_expr = sympy.lambdify(x_sym, C_lib_expr[k])
+        lib_C[k] = lamb_expr(centers)
+
+    n_terms = num_A_expr + num_C_expr
+
+    # Regress on fixed terms
+    Xi0 = [*np.array(coeffs)[np.nonzero(coeffs)], ep0, ep1]
+    # Xi0 = np.empty((num_A_expr + num_C_expr))
+    # A_coeffs = np.average(lstsq(lib_A.T, moment_1_stack.T)[0], axis=1)
+    # A_coeffs[-1] = -np.abs(A_coeffs[-1])
+    # Xi0[:num_A_expr] = A_coeffs
+    # Xi0[num_A_expr:] = np.average(lstsq(lib_C.T, moment_2_stack.T)[0], axis=1)
+    # print(f"Least squares: {Xi0=}\n", flush=True)
+
+    first_weights = np.abs(1 / np.std(moment_1_stack, axis=0, keepdims=True))
+    second_weights = np.abs(1 / np.std(moment_2_stack, axis=0, keepdims=True))
+    first_weights /= np.sum(first_weights, axis=1, keepdims=True)
+    second_weights /= np.sum(second_weights, axis=1, keepdims=True)
+    weights = np.array([first_weights, second_weights])
+
+    dx = centers[1] - centers[0]
+    sfp = SteadyFP(num_bins, dx)
+
+    params = {
+        "Ws": weights,
+        "Xi0": Xi0,
+        "chi0": np.array([1.0]),
+        "A_KMs": moment_1_stack,
+        "C_KMs": moment_2_stack,
+        "A_expr": A_lib_expr,
+        "C_expr": C_lib_expr,
+        "lib_A": lib_A,
+        "lib_C": lib_C,
+        "sfp": sfp,
+        "pdfs": pdf_stack,
+        "dx": dx,
+    }
+    # Xi0, _ = optimise_function(cost_stack, params)
+    # # print(f"Moment optimise: {Xi0=}\n", flush=True)
+    # A_coeffs = Xi0[:num_A_expr]
+    # A_coeffs[-1] = -np.abs(A_coeffs[-1])
+    # Xi0[:num_A_expr] = A_coeffs
+    # params["Xi0"] = Xi0
+
+    # opt_func = lambda params: optimise_function(cost_KL, params)
+    # xi, cost_val = optimise_function(cost_KL, params)
+    xi, cost_val = optimise_functions(cost_just_jef_stack, cost_alpha_stack, params)
+
+    # TODO: Could perform some rounding on the found params, e.g. 0.012324 -> 0.012
+    A_sym = sindy_model(xi[:num_A_expr], A_lib_expr)
+    A_sindy = sympy.lambdify(x_sym, A_sym)(centers)
+    C_sym = sindy_model(xi[num_A_expr:], C_lib_expr)
+    C_sindy = sympy.lambdify(x_sym, C_sym)(centers)
+
+    if np.ndim(A_sindy) == 0:
+        A_sindy = np.full_like(centers, A_sindy)
+    if np.ndim(C_sindy) == 0:
+        C_sindy = np.full_like(centers, C_sindy)
+
+    # print(f"dx = ({A_sym}) dt + ({sympy.sqrt(2.0*C_sym)}) dβ")
+
+    ## Directly compare True answer to Found answer
+    true_model_xi = np.zeros(n_terms)
+    true_model_xi[:num_A_expr] = np.array(coeffs)[np.nonzero(coeffs)]
+    true_model_xi[num_A_expr + 0] = ep0 / 2  # B = sqrt(ep0 + ep1 x^2) ->
+    true_model_xi[num_A_expr + 1] = ep1 / 2  # C = B^2 / 2 -> ep0 / 2 + ep1 / 2 x^2
+
+    # found_pdf = sfp.solve(A_sindy, C_sindy)
+
+    # differences = np.abs((xi - true_model_xi) / true_model_xi)
+
+    return cost_val, xi, true_model_xi
 
 
 def run_fixed_model(
@@ -42,7 +154,6 @@ def run_fixed_model(
     times = np.arange(0, num_datapoints) * dt
 
     ## Define model: dx = A(x)dt + B(x)dw; C(x) = B^2 / 2
-    # Higher order Pitchfork with multiplicative noise
     x = y(0)
     A = 0
     if EVEN_ABS:
@@ -65,6 +176,7 @@ def run_fixed_model(
         (SDE.integrate(t)[0] for t in times), dtype=float, count=num_datapoints
     )
     assert x_data.shape == (num_datapoints,)
+    x_data = np.append(x_data, -x_data)
 
     ## Perform Kramers Moyal
     edges = np.linspace(np.min(x_data), np.max(x_data), num_bins + 1)
@@ -114,11 +226,11 @@ def run_fixed_model(
     n_terms = num_A_expr + num_C_expr
 
     # Regress on fixed terms
-    Xi0 = np.empty((num_A_expr + num_C_expr))
-    Xi0[:num_A_expr] = lstsq(lib_A.T, moment_1)[0]
-    Xi0[num_A_expr:] = lstsq(lib_C.T, moment_2)[0]
-
-    Xi0[num_A_expr] = -np.abs(Xi0[num_A_expr])
+    # Xi0 = np.empty((num_A_expr + num_C_expr))
+    # Xi0[:num_A_expr] = lstsq(lib_A.T, moment_1)[0]
+    # Xi0[num_A_expr:] = lstsq(lib_C.T, moment_2)[0]
+    # Xi0[num_A_expr] = -np.abs(Xi0[num_A_expr])
+    Xi0 = np.array([*np.array(coeffs)[np.nonzero(coeffs)], ep0, ep1])
     # print(f"{Xi0=}")
     if PDF_WEIGHTS:
         weight = pdf
@@ -131,6 +243,7 @@ def run_fixed_model(
     params = {
         "W": weights,
         "Xi0": Xi0,
+        "chi0": 1.0,
         "A_KM": moment_1,
         "C_KM": moment_2,
         "A_expr": A_lib_expr,
@@ -168,218 +281,292 @@ def run_fixed_model(
     found_pdf = sfp.solve(A_sindy, C_sindy)
 
     differences = np.abs((xi - true_model_xi) / true_model_xi)
-    return xi, cost_val, differences, centers_x, pdf, found_pdf
+    return xi, true_model_xi, cost_val, differences, centers_x, pdf, found_pdf
 
 
-def run_fixed_model_dict(dict_):
-    start = time()
-    print(f"Model: {dict_} started", flush=True)
-    ret = run_fixed_model(True, False, **dict_)
-    print(f"Model: {dict_} finished, elapsed={time() - start}", flush=True)
-    return ret
+# def run_fixed_model_dict(dict_):
+#     start = time()
+#     print(f"Model: {dict_} started", flush=True)
+#     ret = run_fixed_model(True, False, **dict_)
+#     print(f"Model: {dict_} finished, elapsed={time() - start}", flush=True)
+#     return ret
 
 
-# TODO: implement repetition?
-def do_test(
-    target_var,
-    range_var,
-    logx=True,
-    coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
-    target_name=None,
-):
-    if target_name is None:
-        target_name = target_var
-    start = time()
-    print(f"{target_name} targeting {target_var} started", flush=True)
+# # TODO: implement repetition?
+# def do_test(
+#     target_var,
+#     range_var,
+#     logx=True,
+#     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
+#     target_name=None,
+# ):
+#     if target_name is None:
+#         target_name = target_var
+#     start = time()
+#     print(f"{target_name} targeting {target_var} started", flush=True)
 
-    xis = []
-    costs = []
-    diffs = []
-    centers = []
-    pdfs = []
-    found_pdfs = []
-    for var in range_var:
-        print(f"{target_var}={var}, started at {time() - start}", flush=True)
-        xi, cost, diff, center, pdf, found_pdf = run_fixed_model(
-            **{target_var: var}, seed=seed
-        )
-        xis.append(xi)
-        costs.append(cost)
-        diffs.append(diff)
-        centers.append(center)
-        pdfs.append(pdf)
-        found_pdfs.append(found_pdf)
-    diffs = np.array(diffs).T
+#     xis = []
+#     costs = []
+#     diffs = []
+#     centers = []
+#     pdfs = []
+#     found_pdfs = []
+#     for var in range_var:
+#         print(f"{target_var}={var}, started at {time() - start}", flush=True)
+#         xi, cost, diff, center, pdf, found_pdf = run_fixed_model(
+#             **{target_var: var}, seed=seed
+#         )
+#         xis.append(xi)
+#         costs.append(cost)
+#         diffs.append(diff)
+#         centers.append(center)
+#         pdfs.append(pdf)
+#         found_pdfs.append(found_pdf)
+#     diffs = np.array(diffs).T
 
-    with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
-        np.savez(
-            f,
-            xis=np.asarray(xis),
-            range_var=np.asarray(range_var),
-            costs=np.asarray(costs),
-            diffs=np.asarray(diffs),
-            centers=np.asarray(centers),
-            pdfs=np.asarray(pdfs),
-            found_pdfs=np.asarray(found_pdfs),
-        )
+#     with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
+#         np.savez(
+#             f,
+#             xis=np.asarray(xis),
+#             range_var=np.asarray(range_var),
+#             costs=np.asarray(costs),
+#             diffs=np.asarray(diffs),
+#             centers=np.asarray(centers),
+#             pdfs=np.asarray(pdfs),
+#             found_pdfs=np.asarray(found_pdfs),
+#         )
 
-    do_plot(
-        target_name,
-        range_var,
-        costs,
-        diffs,
-        centers,
-        pdfs,
-        found_pdfs,
-        logx,
-        coeff_labels,
-    )
+#     do_plot(
+#         target_name,
+#         range_var,
+#         costs,
+#         diffs,
+#         centers,
+#         pdfs,
+#         found_pdfs,
+#         logx,
+#         coeff_labels,
+#     )
 
-    print(f"{target_var}, finished at {time() - start}", flush=True)
-
-
-def do_test_parallel(
-    target_var,
-    range_var,
-    logx=True,
-    coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
-    target_name=None,
-    POOLSIZE=None,
-    seed=None,
-):
-    if target_name is None:
-        target_name = target_var
-    start = time()
-    params = {
-        "dt": 0.001,
-        "num_datapoints": 10000000,
-        "num_bins": 100,
-        "kl_reg": 0.001,
-        "ep0": 1e-5,
-        "ep1": 0.1,
-        "coeffs": [0, -0.016, 0, 1.35, -1],
-        "x0": 0,
-        "seed": seed,
-    }
-    print(
-        f"{target_name} targeting {target_var} started with params {params}", flush=True
-    )
-    params_list = []
-    for var in range_var:
-        params_copy = params.copy()
-        params_copy[target_var] = var
-        params_list.append(params_copy)
-
-    with Pool(POOLSIZE) as p:
-        res = p.map(run_fixed_model_dict, params_list)
-
-    xis = []
-    costs = []
-    diffs = []
-    centers = []
-    pdfs = []
-    found_pdfs = []
-    for xi, cost, diff, center, pdf, found_pdf in res:
-        xis.append(xi)
-        costs.append(cost)
-        diffs.append(diff)
-        centers.append(center)
-        pdfs.append(pdf)
-        found_pdfs.append(found_pdf)
-    diffs = np.array(diffs).T
-
-    with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
-        np.savez(
-            f,
-            xis=np.asarray(xis),
-            range_var=np.asarray(range_var),
-            costs=np.asarray(costs),
-            diffs=np.asarray(diffs),
-            centers=np.asarray(centers),
-            pdfs=np.asarray(pdfs),
-            found_pdfs=np.asarray(found_pdfs),
-        )
-
-    do_plot(
-        target_name,
-        range_var,
-        costs,
-        diffs,
-        centers,
-        pdfs,
-        found_pdfs,
-        logx,
-        coeff_labels,
-    )
-
-    print(f"{target_var}, finished at {time() - start}", flush=True)
+#     print(f"{target_var}, finished at {time() - start}", flush=True)
 
 
-def do_test_coeffs(
-    target_name,
-    target_index,
-    range_var,
-    default_coeffs=[0.0, -0.016, 0.0, 1.35, -1],
-    logx=True,
-    coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
-):
+# def do_test_parallel(
+#     target_var,
+#     range_var,
+#     logx=True,
+#     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
+#     target_name=None,
+#     POOLSIZE=None,
+#     seed=None,
+# ):
+#     if target_name is None:
+#         target_name = target_var
+#     start = time()
+#     params = {
+#         "dt": 0.001,
+#         "num_datapoints": 10000000,
+#         "num_bins": 100,
+#         "kl_reg": 0.001,
+#         "ep0": 1e-5,
+#         "ep1": 0.1,
+#         "coeffs": [0, -0.016, 0, 1.35, -1],
+#         "x0": 0,
+#         "seed": seed,
+#     }
+#     print(
+#         f"{target_name} targeting {target_var} started with params {params}", flush=True
+#     )
+#     params_list = []
+#     for var in range_var:
+#         params_copy = params.copy()
+#         params_copy[target_var] = var
+#         params_list.append(params_copy)
 
-    start = time()
-    print(f"{target_name} started", flush=True)
-    xis = []
-    costs = []
-    diffs = []
-    centers = []
-    pdfs = []
-    found_pdfs = []
-    for var in range_var:
-        print(f"{target_name}={var}, started at {time() - start}", flush=True)
-        default_coeffs[target_index] = var
-        xi, cost, diff, center, pdf, found_pdf = run_fixed_model(
-            coeffs=default_coeffs, seed=seed
-        )
-        xis.append(xi)
-        costs.append(cost)
-        diffs.append(diff)
-        centers.append(center)
-        pdfs.append(pdf)
-        found_pdfs.append(found_pdf)
-    diffs = np.array(diffs).T
+#     with Pool(POOLSIZE) as p:
+#         res = p.map(run_fixed_model_dict, params_list)
 
-    with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
-        np.savez(
-            f,
-            xis=np.asarray(xis),
-            range_var=np.asarray(range_var),
-            costs=np.asarray(costs),
-            diffs=np.asarray(diffs),
-            centers=np.asarray(centers),
-            pdfs=np.asarray(pdfs),
-            found_pdfs=np.asarray(found_pdfs),
-        )
-    do_plot(
-        target_name,
-        range_var,
-        costs,
-        diffs,
-        centers,
-        pdfs,
-        found_pdfs,
-        logx,
-        coeff_labels,
-    )
+#     xis = []
+#     costs = []
+#     diffs = []
+#     centers = []
+#     pdfs = []
+#     found_pdfs = []
+#     for xi, cost, diff, center, pdf, found_pdf in res:
+#         xis.append(xi)
+#         costs.append(cost)
+#         diffs.append(diff)
+#         centers.append(center)
+#         pdfs.append(pdf)
+#         found_pdfs.append(found_pdf)
+#     diffs = np.array(diffs).T
 
-    print(f"{target_name}, finished at {time() - start}", flush=True)
+#     with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
+#         np.savez(
+#             f,
+#             xis=np.asarray(xis),
+#             range_var=np.asarray(range_var),
+#             costs=np.asarray(costs),
+#             diffs=np.asarray(diffs),
+#             centers=np.asarray(centers),
+#             pdfs=np.asarray(pdfs),
+#             found_pdfs=np.asarray(found_pdfs),
+#         )
+
+#     do_plot(
+#         target_name,
+#         range_var,
+#         costs,
+#         diffs,
+#         centers,
+#         pdfs,
+#         found_pdfs,
+#         logx,
+#         coeff_labels,
+#     )
+
+#     print(f"{target_var}, finished at {time() - start}", flush=True)
 
 
-from mpi4py import MPI
+# def do_test_coeffs(
+#     target_name,
+#     target_index,
+#     range_var,
+#     default_coeffs=[0.0, -0.016, 0.0, 1.35, -1],
+#     logx=True,
+#     coeff_labels=["x", "x^3", "x^3|x|", "ep0", "ep1"],
+# ):
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
+#     start = time()
+#     print(f"{target_name} started", flush=True)
+#     xis = []
+#     costs = []
+#     diffs = []
+#     centers = []
+#     pdfs = []
+#     found_pdfs = []
+#     for var in range_var:
+#         print(f"{target_name}={var}, started at {time() - start}", flush=True)
+#         default_coeffs[target_index] = var
+#         xi, cost, diff, center, pdf, found_pdf = run_fixed_model(
+#             coeffs=default_coeffs, seed=seed
+#         )
+#         xis.append(xi)
+#         costs.append(cost)
+#         diffs.append(diff)
+#         centers.append(center)
+#         pdfs.append(pdf)
+#         found_pdfs.append(found_pdf)
+#     diffs = np.array(diffs).T
+
+#     with open(SCRATCH_PATH / f"test_{target_name}.npz", "wb") as f:
+#         np.savez(
+#             f,
+#             xis=np.asarray(xis),
+#             range_var=np.asarray(range_var),
+#             costs=np.asarray(costs),
+#             diffs=np.asarray(diffs),
+#             centers=np.asarray(centers),
+#             pdfs=np.asarray(pdfs),
+#             found_pdfs=np.asarray(found_pdfs),
+#         )
+#     do_plot(
+#         target_name,
+#         range_var,
+#         costs,
+#         diffs,
+#         centers,
+#         pdfs,
+#         found_pdfs,
+#         logx,
+#         coeff_labels,
+#     )
+
+#     print(f"{target_name}, finished at {time() - start}", flush=True)
+
+
+# from mpi4py import MPI
+
+# comm = MPI.COMM_WORLD
+# rank = comm.Get_rank()
+# size = comm.Get_size()
+
+import matplotlib.pyplot as plt
 
 seed = 987654321
 start = time()
+TEMPDIR = SCRATCH_PATH / "cycling_smaller_dt"
+TEMPDIR.mkdir(parents=True, exist_ok=True)
+xi0 = np.array([-0.1, 1.5, -1, 1e-1 / 2, 0.2 / 2])
+xi_history = [xi0]
+target_metadata = {
+    "num_datapoints": 10_000_000,
+    "dt": 0.0001,
+    "EVEN_ABS": True,
+    "coeffs": [0, xi0[0], 0, xi0[1], xi0[2]],
+    "ep0": xi0[3] * 2,
+    "ep1": xi0[4] * 2,
+    "x0": 0.0,
+    "num_bins": 100,
+}
+for i in range(10):
+    model_stack = get_models(TEMPDIR, target_metadata, 10)
+    cost, xi, true = analyse_model_stack(
+        model_stack,
+        coeffs=[0, xi0[0], 0, xi0[1], xi0[2]],
+        ep0=xi0[3] * 2,
+        ep1=xi0[4] * 2,
+        num_bins=target_metadata["num_bins"],
+    )
+    print("Prev:", xi0)
+    print("Curr:", xi)
+    print()
+    xi_history.append(xi)
+    xi0 = xi
+    target_metadata = {
+        "num_datapoints": 10_000_000,
+        "dt": 0.0001,
+        "EVEN_ABS": True,
+        "coeffs": [0, xi0[0], 0, xi0[1], xi0[2]],
+        "ep0": xi0[3] * 2,
+        "ep1": xi0[4] * 2,
+        "x0": 0.0,
+        "num_bins": 100,
+    }
+xi_history = np.array(xi_history).T
+fig, axes = plt.subplots(ncols=5, figsize=(20, 7))
+for label, ax, xi_h in zip(
+    # [r"$-R$", r"$m(\sigma)$", r"$-1$", r"$\epsilon_0$", r"$\epsilon_1$"],
+    [r"$-Rx$", r"$m(\sigma)x^3$", r"$-x^3|x|$", r"$\epsilon_0$", r"$\epsilon_1 x^2$"],
+    axes,
+    xi_history,
+):
+    ax.plot(xi_h)
+    ax.set_ylabel(label)
+    ax.set_xlabel("iterations")
+fig.tight_layout()
+fig.savefig(TEMPDIR / "iterated_model.png")
+
+fig2, axes2 = plt.subplots(ncols=5, figsize=(20, 7))
+diff = 100 * (xi_history - xi_history[:, 0][:, None]) / xi_history[:, 0][:, None]
+for label, ax, xi_h in zip(
+    [
+        r"$\delta(-R x)$, %",
+        r"$\delta(m(\sigma) x^3)$, %",
+        r"$\delta(-x^3|x|)$, %",
+        r"$\delta(\epsilon_0)$, %",
+        r"$\delta(\epsilon_1 x^2)$, %",
+    ],
+    axes2,
+    diff,
+):
+    ax.plot(xi_h)
+    ax.set_ylabel(label)
+    ax.set_xlabel("iterations")
+fig2.tight_layout()
+fig2.savefig(TEMPDIR / "iterated_model_percent_diff.png")
+
+
 # ### program splits
 # if rank == (0 % size):
 #     do_test("num_datapoints", np.logspace(6, 9, 20).astype(int))
@@ -414,16 +601,16 @@ start = time()
 
 # do_test("dt", np.logspace(-3, -2.2, 10), target_name="dt zoom")
 
-import os
+# import os
 
-NUM_CPUS = int(os.environ.get("SLURM_NTASKS_PER_NODE", default=1))
-print(f"{NUM_CPUS=}")
+# NUM_CPUS = int(os.environ.get("SLURM_NTASKS_PER_NODE", default=1))
+# print(f"{NUM_CPUS=}")
+# # do_test_parallel(
+# #     "dt", np.logspace(-4, -1, 30), target_name="dt zoom", POOLSIZE=NUM_CPUS
+# # )
 # do_test_parallel(
-#     "dt", np.logspace(-4, -1, 30), target_name="dt zoom", POOLSIZE=NUM_CPUS
+#     "kl_reg",
+#     np.array([0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e0, 1e2]),
+#     target_name="kl_reg",
+#     POOLSIZE=NUM_CPUS,
 # )
-do_test_parallel(
-    "kl_reg",
-    np.array([0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e0, 1e2]),
-    target_name="kl_reg",
-    POOLSIZE=NUM_CPUS,
-)
