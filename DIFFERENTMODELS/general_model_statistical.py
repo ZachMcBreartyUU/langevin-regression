@@ -3,18 +3,13 @@ from functools import partial
 import multiprocessing as mp
 
 import sympy
-import symengine
 import numpy as np
 from scipy.optimize import minimize
-from scipy.stats import skew, kurtosis
 import matplotlib.pyplot as plt
 
 from make_and_load_models import get_timeseries_and_KM
 from kramersmoyal import km
 from utils import sindy_model, jeffreys_divergence
-
-from mpl_toolkits.axisartist import Axes  # typing
-
 
 def cost_diffusion(
     xi_C,
