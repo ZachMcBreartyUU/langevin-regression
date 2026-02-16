@@ -173,6 +173,14 @@ def run_model(
     )
 
     time, x = timeseries
+    for i in range(NUM_DATASETS):
+        fig, ax = plt.subplots()
+        ax.plot(time[i], x[i])
+        ax.set_xlabel("time, t")
+        ax.set_ylabel("value, x")
+        fig.savefig(FIG_PATH / f"dataset_{i}.png")
+        plt.close(fig)
+
     dx = x[:, 1:] - x[:, :-1]
 
     # time, x, dx: shape (NUM_MODELS, (num_datapoints - 1) // timeseries_skip)
@@ -306,6 +314,35 @@ def run_model(
         C_expr = sindy_model(xi_C_model, lib_C_expr)
         diffusion_expr = sympy.sqrt(sympy.N(2 * C_expr, 2))
 
+        fig, ax = plt.subplots()
+        ax.plot(
+            centers_KM,
+            diffusion_KM.T,
+            linestyle="",
+            marker="x",
+            alpha=0.7,
+            label="Data",
+        )
+        ax.plot(centers_KM, lib_C_KM.T @ xi_C_model, color="r", label="Model")
+        ax.set_xlabel("$x$")
+        ax.set_ylabel("Diffusion, $C(x)$")
+        ax.set_title(f"${sympy.latex(diffusion_expr)}$")
+        fig.savefig(FIG_PATH / f"Diffusion_fit_data_alpha_{alpha_val}.png")
+        plt.close(fig)
+
+        dw_Q = dx / diffusion_model_timeseries
+        (dw_Q_hist,), _ = km(dw_Q.flatten(), bins=(normal_dist_edges,), powers=0)
+        dw_Q_hist /= np.sum(dw_Q_hist * normal_dist_dx)
+
+        fig, ax = plt.subplots()
+        ax.plot(normal_dist_centers, normal_dist, label="Normal")
+        ax.plot(normal_dist_centers, dw_Q_hist, color="r", label="Model")
+        ax.set_xlabel("$x$")
+        ax.set_ylabel(r"Q measure noise, $dW^\mathbb{Q}$")
+        ax.set_title(f"${sympy.latex(diffusion_expr)}$")
+        fig.savefig(FIG_PATH / f"Diffusion_fit_dwQ_alpha_{alpha_val}.png")
+        plt.close(fig)
+
         for beta_val in beta:
             xi_A_0 = np.ones(num_A_expr)
             best_cost_A = np.full((num_A_expr,), np.inf)
@@ -362,6 +399,39 @@ def run_model(
 
             xi_A_model = best_xi_A[-3]
             drift_expr = sympy.N(sindy_model(xi_A_model, lib_A_expr), 2)
+            drift_model_timeseries = lib_A_timeseries.transpose((1, 2, 0)) @ xi_A_model
+            fig, ax = plt.subplots()
+            ax.plot(
+                centers_KM,
+                drift_KM.T,
+                linestyle="",
+                marker="x",
+                alpha=0.7,
+                label="Data",
+            )
+            ax.plot(centers_KM, lib_A_KM.T @ xi_A_model, color="r", label="Model")
+            ax.set_xlabel("$x$")
+            ax.set_ylabel("Drift, $A(x)$")
+            ax.set_title(f"${sympy.latex(drift_expr)}$")
+            fig.savefig(
+                FIG_PATH / f"Drift_fit_data_alpha_{alpha_val}_beta_{beta_val}.png"
+            )
+            plt.close(fig)
+
+            dw_P = (dx - drift_model_timeseries * dt) / diffusion_model_timeseries
+            (dw_P_hist,), _ = km(dw_P.flatten(), bins=(normal_dist_edges,), powers=0)
+            dw_P_hist /= np.sum(dw_P_hist * normal_dist_dx)
+
+            fig, ax = plt.subplots()
+            ax.plot(normal_dist_centers, normal_dist, label="Normal")
+            ax.plot(normal_dist_centers, dw_P_hist, color="r", label="Model")
+            ax.set_xlabel("$x$")
+            ax.set_ylabel(r"P measure noise, $dW^\mathbb{P}$")
+            ax.set_title(f"${sympy.latex(drift_expr)}$")
+            fig.savefig(
+                FIG_PATH / f"Drift_fit_dwP_alpha_{alpha_val}_beta_{beta_val}.png"
+            )
+            plt.close(fig)
 
             print(
                 f"{alpha_val=}, {beta_val=}; dx = {drift_expr} dt + {diffusion_expr} dbeta"
@@ -384,8 +454,76 @@ def run_model(
             val_lib_A_timeseries = drift_lambda(val_x)[None, ...]
 
             diffusion_lambda = sympy.lambdify(x_sym, diffusion_expr)
-            val_lib_C_KM = diffusion_lambda(val_centers)[None, ...]
-            val_lib_C_timeseries = diffusion_lambda(val_x)[None, ...]
+            val_lib_C_KM = diffusion_lambda(val_centers)[None, ...] ** 2 / 2
+            val_lib_C_timeseries = diffusion_lambda(val_x)[None, ...] ** 2 / 2
+
+            fig, ax = plt.subplots()
+            ax.plot(
+                val_centers,
+                val_diff.T,
+                linestyle="",
+                marker="x",
+                alpha=0.7,
+                label="Val data",
+            )
+            ax.plot(val_centers, val_lib_C_KM[0], color="r", label="Model")
+            ax.set_xlabel("$x$")
+            ax.set_ylabel("Diffusion, $C(x)$")
+            ax.set_title(f"${sympy.latex(diffusion_expr)}$")
+            fig.savefig(FIG_PATH / f"Diffusion_val_data_alpha_{alpha_val}.png")
+            plt.close(fig)
+
+            val_dw_Q = (val_dx) / np.sqrt(2 * val_lib_C_timeseries[0])
+            (val_dw_Q_hist,), _ = km(
+                val_dw_Q.flatten(), bins=(normal_dist_edges,), powers=0
+            )
+            val_dw_Q_hist /= np.sum(val_dw_Q_hist * normal_dist_dx)
+
+            fig, ax = plt.subplots()
+            ax.plot(normal_dist_centers, normal_dist, label="Normal")
+            ax.plot(normal_dist_centers, val_dw_Q_hist, color="r", label="Model")
+            ax.set_xlabel("$x$")
+            ax.set_ylabel(r"Q measure noise, $dW^\mathbb{Q}$")
+            ax.set_title(f"${sympy.latex(diffusion_expr)}$")
+            fig.savefig(FIG_PATH / f"Diffusion_val_dwQ_alpha_{alpha_val}.png")
+            plt.close(fig)
+
+            fig, ax = plt.subplots()
+            ax.plot(
+                val_centers,
+                val_drift.T,
+                linestyle="",
+                marker="x",
+                alpha=0.7,
+                label="Val data",
+            )
+            ax.plot(val_centers, val_lib_A_KM[0], color="r", label="Model")
+            ax.set_xlabel("$x$")
+            ax.set_ylabel("Drift, $A(x)$")
+            ax.set_title(f"${sympy.latex(drift_expr)}$")
+            fig.savefig(
+                FIG_PATH / f"Drift_val_data_alpha_{alpha_val}_beta_{beta_val}.png"
+            )
+            plt.close(fig)
+
+            val_dw_P = (val_dx - val_lib_A_timeseries[0] * dt) / np.sqrt(
+                2 * val_lib_C_timeseries[0]
+            )
+            (val_dw_P_hist,), _ = km(
+                val_dw_P.flatten(), bins=(normal_dist_edges,), powers=0
+            )
+            val_dw_P_hist /= np.sum(val_dw_P_hist * normal_dist_dx)
+
+            fig, ax = plt.subplots()
+            ax.plot(normal_dist_centers, normal_dist, label="Normal")
+            ax.plot(normal_dist_centers, val_dw_P_hist, color="r", label="Model")
+            ax.set_xlabel("$x$")
+            ax.set_ylabel(r"P measure noise, $dW^\mathbb{P}$")
+            ax.set_title(f"${sympy.latex(drift_expr)}$")
+            fig.savefig(
+                FIG_PATH / f"Drift_val_dwP_alpha_{alpha_val}_beta_{beta_val}.png"
+            )
+            plt.close(fig)
 
             cost_C_Jeff = cost_diffusion(
                 np.ones(1),
