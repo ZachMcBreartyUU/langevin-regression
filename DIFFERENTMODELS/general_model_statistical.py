@@ -36,10 +36,11 @@ def cost_diffusion(
 
     jef_diverg = jeffreys_divergence(dw_Q_hist, normal_dist, dx=norm_dist_dx)
     if diffusion_KM.shape[0] != 1:
-        diffusion_weight = 1 / np.std(diffusion_KM, axis=0)
+        diffusion_weight = 1 / np.nanvar(diffusion_KM, axis=0)
     else:
-        diffusion_weight = 1
-    diffusion_fidelity = np.sum(
+        diffusion_weight = np.ones_like(diffusion_KM[:, 0])
+    diffusion_weight /= np.nansum(diffusion_weight)
+    diffusion_fidelity = np.nansum(
         diffusion_weight * ((lib_C_KM.T @ xi_C)[None, ...] - diffusion_KM) ** 2
     )
     return (1 - alpha) * jef_diverg + alpha / 2 * diffusion_fidelity
@@ -91,10 +92,11 @@ def cost_drift(
     jef_diverg = jeffreys_divergence(dw_P_hist, normal_dist, dx=norm_dist_dx)
 
     if drift_KM.shape[0] != 1:
-        drift_weight = 1 / np.std(drift_KM, axis=0)
+        drift_weight = 1 / np.nanvar(drift_KM, axis=0)
     else:
-        drift_weight = 1
-    drift_fidelity = np.sum(
+        drift_weight = np.ones_like(drift_KM[:, 0])
+    drift_weight /= np.nansum(drift_weight)
+    drift_fidelity = np.nansum(
         drift_weight * ((lib_A_KM.T @ xi_A)[None, ...] - drift_KM) ** 2
     )
     return (1 - beta) * jef_diverg + beta / 2 * drift_fidelity
@@ -189,6 +191,8 @@ def run_model(
     dx = dx[:, ::timeseries_skip]
 
     centers_KM, pdf_KM, drift_KM, diffusion_KM = KM
+    drift_KM[drift_KM == 0] = np.nan
+    diffusion_KM[diffusion_KM == 0] = np.nan
 
     normal_dist_edges, normal_dist_dx = np.linspace(
         -norm_dist_width * np.sqrt(dt),
@@ -448,6 +452,8 @@ def run_model(
             val_dx = val_dx[:, ::timeseries_skip]
 
             val_centers, val_pdf, val_drift, val_diff = validation_KM
+            val_drift[val_drift == 0] = np.nan
+            val_diff[val_diff == 0] = np.nan
 
             drift_lambda = sympy.lambdify(x_sym, drift_expr)
             val_lib_A_KM = drift_lambda(val_centers)[None, ...]
