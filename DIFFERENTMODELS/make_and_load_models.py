@@ -188,7 +188,7 @@ def _generate_KM(i, edges, models_dir, metadata, metadata_is_right, validation=F
     kmc, centers = km(x_data[..., None], bins=(edges,), powers=2)  # type: ignore
     pdf, moment_1, moment_2 = kmc
     centers = centers[0]
-    pdf /= np.nansum(pdf)
+    pdf /= np.nansum(pdf * (edges[1] - edges[0]))
     moment_1 /= metadata["dt"]
     moment_2 /= metadata["dt"]
     print(f"Saving KM {i+1}", flush=True)
