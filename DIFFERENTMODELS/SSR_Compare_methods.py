@@ -722,11 +722,20 @@ all_drift_exprs = np.asarray(all_drift_exprs)
 all_diffu_exprs = np.asarray(all_diffu_exprs)
 
 format_line = "|c" * (len(equation_names) + 1) + "|"
-table_str = rf"""    \begin{{tabular}}{{{format_line}}}
-"""
+table_str = rf"    \begin{{tabular}}{{{format_line}}}" + "\n"
 table_str += "      " + "%".join(["Method"] + equation_names) + "\n"
+table_str_drift = table_str
+table_str_diffu = table_str
 for method_number in range(len(method_names)):
-    for equation_number in range(len(equation_names)):
-        table_str += ""
-    table_str += "\n"
-table_str += rf"  \end{{tablular}}"
+    table_str_drift += (
+        "      "
+        + "%".join(method_names[method_number] + all_drift_exprs[:, method_number])
+        + "\n"
+    )
+    table_str_diffu += (
+        "      "
+        + "%".join(method_names[method_number] + 2 * all_diffu_exprs[:, method_number])
+        + "\n"
+    )
+table_str_drift += rf"  \end{{tablular}}"
+table_str_diffu += rf"  \end{{tablular}}"
