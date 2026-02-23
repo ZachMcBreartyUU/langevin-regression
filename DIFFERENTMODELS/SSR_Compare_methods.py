@@ -13,7 +13,7 @@ from scipy.optimize import minimize
 from scipy.stats import wasserstein_distance
 import matplotlib.pyplot as plt
 
-from make_and_load_models import get_timeseries_and_KM
+from make_and_load_models import get_timeseries_and_KM, load_and_stack_KM
 from utils import kl_divergence, jeffreys_divergence, SteadyFP
 
 # %%
@@ -489,7 +489,7 @@ def SSR_loop(opt_func_, KM, xi0, lib_drift_KM, lib_diffu_KM, sfp, alpha):
     return min_xis, min_Vs
 
 
-# %%
+# %%script true
 for equation_number in range(len(equation_names)):
     name = equation_names[equation_number]
     folder = folders[equation_number]
@@ -545,7 +545,6 @@ for equation_number in range(len(equation_names)):
     for method_number in range(len(method_names)):
         start = time()
         method_name = method_names[method_number]
-        suffix = f"{method_number}_{method_name}_{folder}"
         alpha_val = alpha_vals[method_number]
         opt_func_ = opt_funcs[method_number]
         print(method_name, alpha_val, opt_func_)
@@ -560,13 +559,15 @@ for equation_number in range(len(equation_names)):
             xis,
             lib_drift_expr,
             lib_diffu_expr,
-            method_name,
-            suffix=suffix,
+            f"{method_number}_{method_name}",
+            suffix=folder,
         )
 
         method_xis.append(xis)
         method_vs.append(Vs)
-
+        end = time()
+        print(f"{end-start}s\n")
+    print("\n\n")
     np.savez(
         SCRATCH_PATH / folder / "SSR_result.npz",
         method_xis=method_xis,
@@ -609,133 +610,192 @@ def AIC(series, N):
     return max_jump_idx
 
 
-all_drift_exprs = []
-all_diffu_exprs = []
-for equation_number in range(len(equation_names)):
-    name = equation_names[equation_number]
-    folder = folders[equation_number]
-    print(name, folder)
-    (SCRATCH_PATH / folder).mkdir(parents=True, exist_ok=True)
-    (FIG_PATH / folder).mkdir(parents=True, exist_ok=True)
-    drift_coef = drift_coefficients[equation_number]
-    ep0, ep1 = diffusion_coefficients[equation_number]
-    target_metadata["EVEN_ABS"] = even_abs_s[equation_number]
-    target_metadata["ep0"] = ep0
-    target_metadata["ep1"] = ep1
-    target_metadata["coeffs"] = drift_coef
-    timeseries, KM, val_timeseries, val_KM = get_timeseries_and_KM(
-        SCRATCH_PATH / folder, target_metadata, NUM_DATASETS, NUM_VALIDATION, NUM_CPUS
-    )
-    centers, pdf, drift, diffusion = KM
-    # could do this instead as |drift - mean| > N std for example
-    # since the value of 0.0 could actually be real
-    # instead of being a lack of data
-    drift[drift == 0.0] = np.nan
-    diffusion[diffusion == 0.0] = np.nan
-    KM = (centers, pdf, drift, diffusion)
+choose_methods = [
+    eval_jump_difference,
+    eval_jump_ratio,
+    eval_jump_difference_ratio,
+    eval_jump_second_difference_ratio,
+    AIC,
+]
+choose_method_names = [
+    "eval jump difference",
+    "eval jump ratio",
+    "eval jump difference ratio",
+    "eval jump second difference ratio",
+    "AIC",
+]
 
-    timeseries_plots(FIG_PATH / folder, timeseries, folder, slice(0, 100_000, 1))
-    del timeseries, val_timeseries
-    KM_plots(FIG_PATH / folder, KM, folder)
+true_drift_exprs = []
+true_diffu_exprs = []
 
-    # make libraries for drift and diffusion
-    x_sym = sympy.symbols("x")
-    num_drift = len(drift_coef) + 1
-    lib_drift_expr, lib_drift_KM = poly_lib(
-        x_sym, num_drift, KM[0], even_abs_s[equation_number], False
-    )
-    num_diffusion = 4
-    lib_diffu_expr, lib_diffu_KM = poly_lib(x_sym, num_diffusion, KM[0], False, False)
-    xi0 = np.zeros(
-        num_drift + num_diffusion
-    )  # np.random.normal(0, 1, (num_drift + num_diffusion,))
-    mask = np.all(np.isfinite(KM[2]), axis=0)
-    xi0[:num_drift] = np.average(lstsq(lib_drift_KM.T[mask], KM[2].T[mask])[0], axis=1)
-    mask = np.all(np.isfinite(KM[3]), axis=0)
-    xi0[num_drift:] = np.average(lstsq(lib_diffu_KM.T[mask], KM[3].T[mask])[0], axis=1)
-
-    sfp = SteadyFP(num_bins, KM[0][1] - KM[0][0])
-
-    with np.load(SCRATCH_PATH / folder / "SSR_result.npz") as f:
-        method_xis = f["method_xis"]
-        method_vs = f["method_vs"]
-    found_pdfs = []
-    found_drifts = []
-    found_drift_exprs = []
-
-    found_diffus = []
-    found_diffu_exprs = []
-    for method_number in range(len(method_names)):
-        method_name = method_names[method_number]
-        suffix = f"{method_number}_{method_name}_{folder}"
-        alpha_val = alpha_vals[method_number]
-        xis = method_xis[method_number]
-        Vs = method_vs[method_number]
-
-        best_xi = xis[eval_jump_ratio(Vs)]
-
-        drift_xi = best_xi[:num_drift]
-        diffu_xi = best_xi[num_drift:]
-
-        found_drift = lib_drift_KM.T @ drift_xi
-        found_diffu = lib_diffu_KM.T @ diffu_xi
-        found_pdf = sfp.solve(found_drift, found_diffu)
-        found_pdf /= np.sum(found_pdf * (KM[0][1] - KM[0][0]))
-
-        found_drift_expr = lib_drift_expr.T @ drift_xi
-        found_diffu_expr = lib_diffu_expr.T @ diffu_xi
-        print(
-            f"dx = ({sympy.N(found_drift_expr, 2)}) dt + {sympy.sqrt(sympy.N(2*found_diffu_expr, 2))}dW"
+table_file = open(SCRATCH_PATH / f"table_file.txt", "w")
+for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_names)):
+    print("Method choosing")
+    all_drift_exprs = []
+    all_diffu_exprs = []
+    for equation_number in range(len(equation_names)):
+        name = equation_names[equation_number]
+        folder = folders[equation_number]
+        print(name, folder)
+        (SCRATCH_PATH / folder).mkdir(parents=True, exist_ok=True)
+        (FIG_PATH / folder).mkdir(parents=True, exist_ok=True)
+        drift_coef = drift_coefficients[equation_number]
+        ep0, ep1 = diffusion_coefficients[equation_number]
+        target_metadata["EVEN_ABS"] = even_abs_s[equation_number]
+        target_metadata["ep0"] = ep0
+        target_metadata["ep1"] = ep1
+        target_metadata["coeffs"] = drift_coef
+        centers, pdf, drift, diffusion = load_and_stack_KM(
+            SCRATCH_PATH / folder, NUM_DATASETS
         )
-        # print(
-        #     f"$dx = ({sympy.latex(sympy.N(found_drift_expr, 2))}) dt + {sympy.latex(sympy.sqrt(sympy.N(2*found_diffu_expr, 2)))} dW$"
-        # )
+        # could do this instead as |drift - mean| > N std for example
+        # since the value of 0.0 could actually be real
+        # instead of being a lack of data
+        drift[drift == 0.0] = np.nan
+        diffusion[diffusion == 0.0] = np.nan
+        KM = (centers, pdf, drift, diffusion)
 
-        KM_plots_one_method(
+        # make libraries for drift and diffusion
+        x_sym = sympy.symbols("x")
+        num_drift = len(drift_coef) + 1
+        lib_drift_expr, lib_drift_KM = poly_lib(
+            x_sym, num_drift, KM[0], even_abs_s[equation_number], False
+        )
+        num_diffusion = 4
+        lib_diffu_expr, lib_diffu_KM = poly_lib(
+            x_sym, num_diffusion, KM[0], False, False
+        )
+        sfp = SteadyFP(num_bins, KM[0][1] - KM[0][0])
+
+        if i == 0:
+            dr = drift_coefficients[equation_number]
+            true_drift_exprs.append(lib_drift_expr.T[: len(dr)] @ np.array(dr))
+            di = diffusion_coefficients[equation_number]
+            true_diffu_exprs.append(lib_diffu_expr.T[: len(di)] @ np.array(di))
+
+        with np.load(SCRATCH_PATH / folder / "SSR_result.npz") as f:
+            method_xis = f["method_xis"]
+            method_vs = f["method_vs"]
+        found_pdfs = []
+        found_drifts = []
+        found_drift_exprs = []
+
+        found_diffus = []
+        found_diffu_exprs = []
+        for method_number in range(len(method_names)):
+            method_name = method_names[method_number]
+            alpha_val = alpha_vals[method_number]
+            xis = method_xis[method_number]
+            Vs = method_vs[method_number]
+            if choosing_method is AIC:
+                best_xi = xis[
+                    choosing_method(Vs, np.arange(num_drift + num_diffusion + 1, 2, -1))
+                ]
+            else:
+                best_xi = xis[choosing_method(Vs)]
+
+            drift_xi = best_xi[:num_drift]
+            diffu_xi = best_xi[num_drift:]
+
+            found_drift = lib_drift_KM.T @ drift_xi
+            found_diffu = lib_diffu_KM.T @ diffu_xi
+            found_pdf = sfp.solve(found_drift, found_diffu)
+            found_pdf /= np.sum(found_pdf * (KM[0][1] - KM[0][0]))
+
+            found_drift_expr = lib_drift_expr.T @ drift_xi
+            found_diffu_expr = lib_diffu_expr.T @ diffu_xi
+            # print(
+            #     method_name,
+            #     f"dx = ({sympy.N(found_drift_expr, 2)}) dt + {sympy.sqrt(sympy.N(2*found_diffu_expr, 2))}dW",
+            # )
+            # print(
+            #     f"$dx = ({sympy.latex(sympy.N(found_drift_expr, 2))}) dt + {sympy.latex(sympy.sqrt(sympy.N(2*found_diffu_expr, 2)))} dW$"
+            # )
+
+            KM_plots_one_method(
+                FIG_PATH / folder,
+                KM,
+                found_pdf,
+                found_drift,
+                found_diffu,
+                f"{method_number}_{method_name}",
+                folder,
+            )
+            found_pdfs.append(found_pdf)
+            found_drifts.append(found_drift)
+            found_drift_exprs.append(found_drift_expr)
+            found_diffus.append(found_diffu)
+            found_diffu_exprs.append(found_diffu_expr)
+        KM_plots_all_methods(
             FIG_PATH / folder,
             KM,
-            found_pdf,
-            found_drift,
-            found_diffu,
-            method_name,
-            suffix,
+            found_pdfs,
+            found_drifts,
+            found_diffus,
+            method_names,
+            folder,
         )
-        found_pdfs.append(found_pdf)
-        found_drifts.append(found_drift)
-        found_drift_exprs.append(found_drift_expr)
-        found_diffus.append(found_diffu)
-        found_diffu_exprs.append(found_diffu_expr)
-    KM_plots_all_methods(
-        FIG_PATH / folder,
-        KM,
-        found_pdfs,
-        found_drifts,
-        found_diffus,
-        method_names,
-        folder,
+
+        all_drift_exprs.append(found_drift_exprs)
+        all_diffu_exprs.append(found_diffu_exprs)
+
+    all_drift_exprs = np.asarray(all_drift_exprs)
+    all_diffu_exprs = np.asarray(all_diffu_exprs)
+
+    format_line = "|c" * (len(equation_names) + 1) + "|"
+    table_str = rf"""\begin{{table}}[]
+    \centering
+    \begin{{tabular}}{{{format_line}}}
+    \hline
+"""
+    table_str += (
+        "      " + " & ".join(["Method"] + equation_names) + "\\\\ \n \\hline \n"
     )
+    table_str_drift = table_str
+    table_str_diffu = table_str
 
-    all_drift_exprs.append(found_drift_exprs)
-    all_diffu_exprs.append(found_diffu_exprs)
-
-all_drift_exprs = np.asarray(all_drift_exprs)
-all_diffu_exprs = np.asarray(all_diffu_exprs)
-
-format_line = "|c" * (len(equation_names) + 1) + "|"
-table_str = rf"    \begin{{tabular}}{{{format_line}}}" + "\n"
-table_str += "      " + "%".join(["Method"] + equation_names) + "\n"
-table_str_drift = table_str
-table_str_diffu = table_str
-for method_number in range(len(method_names)):
     table_str_drift += (
-        "      "
-        + "%".join(method_names[method_number] + all_drift_exprs[:, method_number])
-        + "\n"
+        "    "
+        + " & ".join(
+            ["Truth"]
+            + ["$" + sympy.latex(sympy.N(expr, 2)) + "$" for expr in true_drift_exprs]
+        )
+        + "\\\\ \n \\hline \n"
     )
     table_str_diffu += (
-        "      "
-        + "%".join(method_names[method_number] + 2 * all_diffu_exprs[:, method_number])
-        + "\n"
+        "    "
+        + " & ".join(
+            ["Truth"]
+            + ["$" + sympy.latex(sympy.N(expr, 2)) + "$" for expr in true_diffu_exprs]
+        )
+        + "\\\\ \n \\hline \n"
     )
-table_str_drift += rf"  \end{{tablular}}"
-table_str_diffu += rf"  \end{{tablular}}"
+    for method_number in range(len(method_names)):
+        table_str_drift += "    " + " & ".join(
+            [method_names[method_number].replace("_", " ")]
+            + [
+                "$" + sympy.latex(sympy.N(expr, 2)) + "$"
+                for expr in all_drift_exprs[:, method_number]
+            ]
+        )
+        table_str_diffu += "      " + " & ".join(
+            [method_names[method_number].replace("_", " ")]
+            + [
+                "$" + sympy.latex(sympy.N(expr, 2)) + "$"
+                for expr in 2 * all_diffu_exprs[:, method_number]
+            ]
+        )
+        table_str_drift += "\\\\ \n \\hline \n"
+        table_str_diffu += "\\\\ \n \\hline \n"
+    table_str_drift += rf"""    \end{{tabular}}
+    \caption{{Drift {cmn}}}
+\end{{table}}"""
+    table_str_diffu += rf"""    \end{{tabular}}
+    \caption{{Diffu {cmn}}}
+\end{{table}}"""
+    print(table_str_drift)
+    print(table_str_diffu)
+    table_file.write(cmn + "\n")
+    table_file.write(table_str_drift + "\n")
+    table_file.write(table_str_diffu + "\n")
+table_file.close()
