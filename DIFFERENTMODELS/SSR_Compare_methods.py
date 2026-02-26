@@ -1,10 +1,8 @@
 # %%
 from time import time
 from pathlib import Path
-import os
 from functools import partial
 import multiprocessing as mp
-from typing import Callable, Optional
 
 import sympy
 import numpy as np
