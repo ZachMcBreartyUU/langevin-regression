@@ -245,7 +245,15 @@ def opt_func_cost_Wass_scaling(xi0, KM, lib_drift, lib_diffu, sfp, alpha=1):
 
 
 # %%
-method_names = ["KM", "KM_KL", "KM_Jef", "KM_Wasserstein", "KL", "Jef", "Wasserstein"]
+regression_method_names = [
+    "KM",
+    "KM_KL",
+    "KM_Jef",
+    "KM_Wasserstein",
+    "KL",
+    "Jef",
+    "Wasserstein",
+]
 alpha_vals = [0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0]
 # cost_funcs = [
 #     cost_KL,
@@ -545,12 +553,12 @@ for equation_number in range(len(equation_names)):
     method_xis = []
     method_vs = []
 
-    for method_number in range(len(method_names)):
+    for regression_method_number in range(len(regression_method_names)):
         start = time()
-        method_name = method_names[method_number]
-        alpha_val = alpha_vals[method_number]
-        opt_func_ = opt_funcs[method_number]
-        print(method_name, alpha_val, opt_func_)
+        reg_method_name = regression_method_names[regression_method_number]
+        alpha_val = alpha_vals[regression_method_number]
+        opt_func_ = opt_funcs[regression_method_number]
+        print(reg_method_name, alpha_val, opt_func_)
 
         xis, Vs = SSR_loop(
             opt_func_, KM, xi0, lib_drift_KM, lib_diffu_KM, sfp, alpha_val
@@ -562,7 +570,7 @@ for equation_number in range(len(equation_names)):
             xis,
             lib_drift_expr,
             lib_diffu_expr,
-            f"{method_number}_{method_name}",
+            f"{regression_method_number}_{reg_method_name}",
             suffix=folder,
         )
 
@@ -685,11 +693,12 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
 
         found_diffus = []
         found_diffu_exprs = []
-        for method_number in range(len(method_names)):
-            method_name = method_names[method_number]
-            alpha_val = alpha_vals[method_number]
-            xis = method_xis[method_number]
-            Vs = method_vs[method_number]
+        for regression_method_number in range(len(regression_method_names)):
+            reg_method_name = regression_method_names[regression_method_number]
+            alpha_val = alpha_vals[regression_method_number]
+            xis = method_xis[regression_method_number]
+            Vs = method_vs[regression_method_number]
+
             if choosing_method is AIC:
                 best_xi = xis[
                     choosing_method(Vs, np.arange(num_drift + num_diffusion + 1, 2, -1))
