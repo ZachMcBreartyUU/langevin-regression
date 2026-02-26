@@ -296,7 +296,7 @@ target_metadata = {
 def timeseries_plots(folder, timeseries, suffix="", slice_=slice(None, None, None)):
     time_stack, x_stack = timeseries
     for i in range(len(time_stack)):
-        fig, ax = plt.subplots(figsize=(6, 4))
+        fig, ax = plt.subplots(figsize=(6, 6))
         ax.plot(time_stack[i, slice_], x_stack[i, slice_])
         ax.set_xlabel("Time, $t$")
         ax.set_ylabel("Value, $x$")
@@ -310,7 +310,7 @@ def timeseries_plots(folder, timeseries, suffix="", slice_=slice(None, None, Non
 
 def KM_plots(folder, KM, suffix=""):
     centers, pdf_stack, drift_stack, diffusion_stack = KM
-    fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, figsize=(6, 16), sharex=True)
 
     ax1.plot(centers, pdf_stack.T, alpha=0.7)
     ax1.set_ylabel("PDF, $P(x)$")
@@ -336,26 +336,46 @@ def KM_plots(folder, KM, suffix=""):
 
 
 def KM_plots_one_method(
-    folder, KM, found_pdf, found_drift, found_diffusion, method_name: str, suffix=""
+    folder,
+    KM,
+    found_pdf,
+    found_drift,
+    found_diffusion,
+    drift_expr: str,
+    diffu_expr: str,
+    method_name: str,
+    suffix="",
 ):
     centers, pdf_stack, drift_stack, diffusion_stack = KM
-    fig, (ax1, ax2, ax3) = plt.subplots(3)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, figsize=(6, 16))
     ax1.set_title(method_name)
     ax1.plot(centers, pdf_stack.T, alpha=0.7, linestyle="", marker="x")
     ax1.plot(centers, found_pdf, linestyle="-", label="Model")
     ax1.set_ylabel("PDF, $P(x)$")
 
+    ax2.set_title(drift_expr)
     ax2.plot(centers, drift_stack.T, alpha=0.7, linestyle="", marker="x")
     ax2.plot(centers, found_drift, linestyle="-")
     ax2.set_ylabel("Drift, $m^{(1)}(x)$")
     mean_vals = np.nanmean(drift_stack, axis=0)
-    ax2.set_ylim(np.min(mean_vals), np.max(mean_vals))
+    min_ = np.abs(np.min(mean_vals))
+    max_ = np.abs(np.max(mean_vals))
+    ax2.set_ylim(
+        np.min(mean_vals) - 0.01 * (min_ + max_) / 2,
+        np.max(mean_vals) + 0.01 * (min_ + max_) / 2,
+    )
 
+    ax3.set_title(diffu_expr)
     ax3.plot(centers, diffusion_stack.T, alpha=0.7, linestyle="", marker="x")
     ax3.plot(centers, found_diffusion, linestyle="-")
     ax3.set_ylabel("Diffusion, $m^{(2)}(x)$")
     mean_vals = np.nanmean(diffusion_stack, axis=0)
-    ax3.set_ylim(np.min(mean_vals), np.max(mean_vals))
+    min_ = np.abs(np.min(mean_vals))
+    max_ = np.abs(np.max(mean_vals))
+    ax3.set_ylim(
+        np.min(mean_vals) - 0.01 * (min_ + max_),
+        np.max(mean_vals) + 0.01 * (min_ + max_),
+    )
 
     fig.legend()
     fig.tight_layout()
@@ -364,6 +384,18 @@ def KM_plots_one_method(
         fig.savefig(folder / f"kramers_moyal_{method_name}_{suffix}.png")
     else:
         fig.savefig(folder / f"kramers_moyal_{method_name}.png")
+
+    ax1.set_yscale("log")
+    ax2.set_ylim(
+        -2,
+        2,
+    )
+
+    if suffix:
+        fig.savefig(folder / f"kramers_moyal_zoom_{method_name}_{suffix}.png")
+    else:
+        fig.savefig(folder / f"kramers_moyal_zoom_{method_name}.png")
+
     plt.close(fig)
 
 
@@ -372,7 +404,7 @@ def KM_plots_all_methods(
 ):
     # I think this plot will look extremely messy
     centers, pdf_stack, drift_stack, diffusion_stack = KM
-    fig, (ax1, ax2, ax3) = plt.subplots(3)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, figsize=(6, 16))
     ax1.plot(centers, pdf_stack.T, alpha=0.7, linestyle="", marker="x")
     ax1.set_ylabel("PDF, $P(x)$")
 
@@ -404,7 +436,7 @@ def KM_plots_all_methods(
 def cost_coeffs_plots(
     folder, costs, xis, drift_expr, diffu_expr, method_name, suffix=""
 ):
-    fig, (ax, ax2) = plt.subplots(ncols=2, figsize=(13, 6))
+    fig, (ax, ax2) = plt.subplots(ncols=2, figsize=(12, 6))
     ax.plot(costs)
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Cost")
@@ -422,6 +454,22 @@ def cost_coeffs_plots(
         fig.savefig(folder / f"coeffs_{method_name}_{suffix}.png")
     else:
         fig.savefig(folder / f"coeffs_{method_name}.png")
+
+    plt.close(fig)
+
+
+def choosing_plots(folder, choosing, method_name, suffix):
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot(choosing)
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Choosing")
+    ax.set_title(method_name)
+
+    fig.tight_layout()
+    if suffix:
+        fig.savefig(folder / f"choosing_{method_name}_{suffix}.png")
+    else:
+        fig.savefig(folder / f"choosing_{method_name}.png")
 
     plt.close(fig)
 
@@ -578,9 +626,38 @@ for equation_number in range(len(equation_names)):
         method_vs.append(Vs)
         end = time()
         print(f"{end-start}s\n")
+        for xi in xis:
+            drift_expr = (
+                "$"
+                + sympy.latex(sympy.N(lib_drift_expr.T @ xi[: len(lib_drift_expr)], 2))
+                + "$"
+            )
+            diffu_expr = (
+                "$"
+                + sympy.latex(
+                    sympy.sqrt(
+                        sympy.N(2 * lib_diffu_expr.T @ xi[len(lib_drift_expr) :], 2)
+                    )
+                )
+                + "$"
+            )
+            fdrift = lib_drift_KM.T @ xi[: len(lib_drift_expr)]
+            fdiffu = lib_diffu_KM.T @ xi[len(lib_drift_expr) :]
+            fpdf = sfp.solve(fdrift, fdiffu)
+            KM_plots_one_method(
+                FIG_PATH / folder,
+                KM,
+                fpdf,
+                fdrift,
+                fdiffu,
+                drift_expr,
+                diffu_expr,
+                f"{np.count_nonzero(xi)}_{regression_method_number}_{reg_method_name}",
+                folder,
+            )
     print("\n\n")
     np.savez(
-        SCRATCH_PATH / folder / "SSR_result.npz",
+        FIG_PATH / folder / "SSR_result.npz",
         method_xis=method_xis,
         method_vs=method_vs,
     )
@@ -639,7 +716,7 @@ choose_method_names = [
 true_drift_exprs = []
 true_diffu_exprs = []
 
-table_file = open(SCRATCH_PATH / f"table_file.txt", "w")
+table_file = open(FIG_PATH / f"table_file.txt", "w")
 for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_names)):
     print("Method choosing")
     all_drift_exprs = []
@@ -684,7 +761,7 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
             di = diffusion_coefficients[equation_number]
             true_diffu_exprs.append(lib_diffu_expr.T[: len(di)] @ np.array(di))
 
-        with np.load(SCRATCH_PATH / folder / "SSR_result.npz") as f:
+        with np.load(FIG_PATH / folder / "SSR_result.npz") as f:
             method_xis = f["method_xis"]
             method_vs = f["method_vs"]
         found_pdfs = []
