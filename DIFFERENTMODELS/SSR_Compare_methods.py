@@ -215,12 +215,12 @@ def opt_func_scaling(cost1, xi0, KM, lib_drift, lib_diffu, sfp, alpha):
         options={"adaptive": True},
     )
     xi = res.x
-    xi /= xi[0]
+    xi /= np.abs(xi[0])
 
     res2 = minimize(
         partial(
             cost_scaling,
-            xi=res.x,
+            xi=xi,
             KM=KM,
             lib_drift=lib_drift,
             lib_diffu=lib_diffu,
