@@ -50,7 +50,8 @@ diffusion_coefficients = [
     [1e-5, 0.1],
 ]
 
-even_abs_s = [True, True, True, True]
+even_abs_simulation = [False, False, True, True]
+even_abs_library = [False, False, False, False]
 
 
 # %%
@@ -498,7 +499,7 @@ for equation_number in range(len(equation_names)):
     (FIG_PATH / folder).mkdir(parents=True, exist_ok=True)
     drift_coef = drift_coefficients[equation_number]
     ep0, ep1 = diffusion_coefficients[equation_number]
-    target_metadata["EVEN_ABS"] = even_abs_s[equation_number]
+    target_metadata["EVEN_ABS"] = even_abs_simulation[equation_number]
     target_metadata["ep0"] = ep0
     target_metadata["ep1"] = ep1
     target_metadata["coeffs"] = drift_coef
@@ -521,7 +522,7 @@ for equation_number in range(len(equation_names)):
     x_sym = sympy.symbols("x")
     num_drift = len(drift_coef) + 1
     lib_drift_expr, lib_drift_KM = poly_lib(
-        x_sym, num_drift, KM[0], even_abs_s[equation_number], False
+        x_sym, num_drift, KM[0], even_abs_library[equation_number], False
     )
     num_diffusion = 4
     lib_diffu_expr, lib_diffu_KM = poly_lib(x_sym, num_diffusion, KM[0], False, False)
@@ -641,7 +642,7 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
         (FIG_PATH / folder).mkdir(parents=True, exist_ok=True)
         drift_coef = drift_coefficients[equation_number]
         ep0, ep1 = diffusion_coefficients[equation_number]
-        target_metadata["EVEN_ABS"] = even_abs_s[equation_number]
+        target_metadata["EVEN_ABS"] = even_abs_simulation[equation_number]
         target_metadata["ep0"] = ep0
         target_metadata["ep1"] = ep1
         target_metadata["coeffs"] = drift_coef
@@ -659,7 +660,7 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
         x_sym = sympy.symbols("x")
         num_drift = len(drift_coef) + 1
         lib_drift_expr, lib_drift_KM = poly_lib(
-            x_sym, num_drift, KM[0], even_abs_s[equation_number], False
+            x_sym, num_drift, KM[0], even_abs_library[equation_number], False
         )
         num_diffusion = 4
         lib_diffu_expr, lib_diffu_KM = poly_lib(
