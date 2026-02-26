@@ -811,6 +811,9 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
 
             found_drift_expr = lib_drift_expr.T @ drift_xi
             found_diffu_expr = lib_diffu_expr.T @ diffu_xi
+
+            found_drift_exprs.append(found_drift_expr)
+            found_diffu_exprs.append(found_diffu_expr)
             # print(
             #     method_name,
             #     f"dx = ({sympy.N(found_drift_expr, 2)}) dt + {sympy.sqrt(sympy.N(2*found_diffu_expr, 2))}dW",
@@ -819,37 +822,13 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
             #     f"$dx = ({sympy.latex(sympy.N(found_drift_expr, 2))}) dt + {sympy.latex(sympy.sqrt(sympy.N(2*found_diffu_expr, 2)))} dW$"
             # )
 
-            KM_plots_one_method(
-                FIG_PATH / folder,
-                KM,
-                found_pdf,
-                found_drift,
-                found_diffu,
-                f"{method_number}_{method_name}",
-                folder,
-            )
-            found_pdfs.append(found_pdf)
-            found_drifts.append(found_drift)
-            found_drift_exprs.append(found_drift_expr)
-            found_diffus.append(found_diffu)
-            found_diffu_exprs.append(found_diffu_expr)
-        KM_plots_all_methods(
-            FIG_PATH / folder,
-            KM,
-            found_pdfs,
-            found_drifts,
-            found_diffus,
-            method_names,
-            folder,
-        )
-
         all_drift_exprs.append(found_drift_exprs)
         all_diffu_exprs.append(found_diffu_exprs)
 
     all_drift_exprs = np.asarray(all_drift_exprs)
     all_diffu_exprs = np.asarray(all_diffu_exprs)
 
-    format_line = "|c" * (len(equation_names) + 1) + "|"
+    format_line = "|p{2cm}" + "|p{4cm}" * (len(equation_names)) + "|"
     table_str = rf"""\begin{{table}}[]
     \centering
     \begin{{tabular}}{{{format_line}}}
@@ -877,23 +856,23 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
         )
         + "\\\\ \n \\hline \n"
     )
-    for method_number in range(len(method_names)):
+    for regression_method_number in range(len(regression_method_names)):
         table_str_drift += "    " + " & ".join(
-            [method_names[method_number].replace("_", " ")]
+            [regression_method_names[regression_method_number].replace("_", " ")]
             + [
                 "$" + sympy.latex(sympy.N(expr, 2)) + "$"
-                for expr in all_drift_exprs[:, method_number]
+                for expr in all_drift_exprs[:, regression_method_number]
             ]
         )
         table_str_diffu += "      " + " & ".join(
-            [method_names[method_number].replace("_", " ")]
+            [regression_method_names[regression_method_number].replace("_", " ")]
             + [
                 "$" + sympy.latex(sympy.N(expr, 2)) + "$"
-                for expr in 2 * all_diffu_exprs[:, method_number]
+                for expr in 2 * all_diffu_exprs[:, regression_method_number]
             ]
         )
-        table_str_drift += "\\\\ \n \\hline \n"
-        table_str_diffu += "\\\\ \n \\hline \n"
+        table_str_drift += "\\\\ \n  \\hline \n"
+        table_str_diffu += "\\\\ \n  \\hline \n"
     table_str_drift += rf"""    \end{{tabular}}
     \caption{{Drift {cmn}}}
 \end{{table}}"""
