@@ -662,46 +662,55 @@ for equation_number in range(len(equation_names)):
         method_vs=method_vs,
     )
 
+
 # %%
 
 
 def eval_jump_difference(series):
-    diff = series[1:] - series[:-1]
-    max_jump_idx = np.argmax(diff)
-    return max_jump_idx
+    choosing = series[1:] - series[:-1]
+    chosen = np.argmax(choosing)
+    return choosing, chosen
 
 
 def eval_jump_ratio(series):
-    diff = series[1:] / series[:-1]
-    max_jump_idx = np.argmax(diff)
-    return max_jump_idx
+    choosing = series[1:] / series[:-1]
+    chosen = np.argmax(choosing)
+    return choosing, chosen
 
 
 def eval_jump_difference_ratio(series):
-    diff = (series[1:] - series[:-1]) / series[:-1]
-    max_jump_idx = np.argmax(diff)
-    return max_jump_idx
+    choosing = (series[1:] - series[:-1]) / series[:-1]
+    chosen = np.argmax(choosing)
+    return choosing, chosen
+
+
+def eval_jump_difference_ratio_first(series):
+    choosing = (series[1:] - series[:-1]) / series[:-1]
+    chosen = np.nonzero(choosing > np.max(choosing) / 5)[0][0]
+    return choosing, chosen
 
 
 def eval_jump_second_difference_ratio(series):
-    diff = (series[2:] - series[:-2]) / series[1:-1]
-    max_jump_idx = np.argmax(diff)
-    return max_jump_idx
+    choosing = np.full_like(series, np.inf)
+    choosing[1:-1] = (series[2:] - series[:-2]) / series[1:-1]
+    chosen = np.argmax(choosing)
+    return choosing, chosen
 
 
 def AIC(series, N):
     """Akaike_information_criterion
     series: cost
     N: number of parameters at each cost level"""
-    AIC_ = 2 * N - 2 * np.log(series)
-    max_jump_idx = np.argmin(AIC_)
-    return max_jump_idx
+    choosing = 2 * N - 2 * np.log(series)
+    chosen = np.argmax(choosing)
+    return choosing, chosen
 
 
 choose_methods = [
     eval_jump_difference,
     eval_jump_ratio,
     eval_jump_difference_ratio,
+    eval_jump_difference_ratio_first,
     eval_jump_second_difference_ratio,
     AIC,
 ]
@@ -709,6 +718,7 @@ choose_method_names = [
     "eval jump difference",
     "eval jump ratio",
     "eval jump difference ratio",
+    "eval jump difference ratio first",
     "eval jump second difference ratio",
     "AIC",
 ]
@@ -779,12 +789,18 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
             Vs = method_vs[regression_method_number]
 
             if choosing_method is AIC:
-                best_xi = xis[
-                    choosing_method(Vs, np.arange(num_drift + num_diffusion + 1, 2, -1))
-                ]
+                choosing, chosen = choosing_method(
+                    Vs, np.arange(num_drift + num_diffusion + 1, 2, -1)
+                )
             else:
-                best_xi = xis[choosing_method(Vs)]
-
+                choosing, chosen = choosing_method(Vs)
+            choosing_plots(
+                FIG_PATH / folder,
+                choosing,
+                f"{i}_{cmn}_{regression_method_number}_{reg_method_name}",
+                folder,
+            )
+            best_xi = xis[chosen]
             drift_xi = best_xi[:num_drift]
             diffu_xi = best_xi[num_drift:]
 
