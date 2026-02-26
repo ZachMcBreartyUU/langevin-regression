@@ -532,7 +532,9 @@ for equation_number in range(len(equation_names)):
     mask = np.all(np.isfinite(KM[2]), axis=0)
     xi0[:num_drift] = np.average(lstsq(lib_drift_KM.T[mask], KM[2].T[mask])[0], axis=1)
     mask = np.all(np.isfinite(KM[3]), axis=0)
-    xi0[num_drift:] = np.average(lstsq(lib_diffu_KM.T[mask], KM[3].T[mask])[0], axis=1)
+    xi0[num_drift:] = np.abs(
+        np.average(lstsq(lib_diffu_KM.T[mask], KM[3].T[mask])[0], axis=1)
+    )
 
     sfp = SteadyFP(num_bins, KM[0][1] - KM[0][0])
 
