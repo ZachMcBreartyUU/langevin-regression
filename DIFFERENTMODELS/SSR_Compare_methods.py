@@ -758,8 +758,10 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
         if i == 0:
             dr = drift_coefficients[equation_number]
             true_drift_exprs.append(lib_drift_expr.T[: len(dr)] @ np.array(dr))
-            di = diffusion_coefficients[equation_number]
-            true_diffu_exprs.append(lib_diffu_expr.T[: len(di)] @ np.array(di))
+            ep0_, ep1_ = diffusion_coefficients[equation_number]
+            true_diffu_exprs.append(
+                ep0_ * lib_diffu_expr.T[0] + ep1_ * lib_diffu_expr.T[2]
+            )
 
         with np.load(FIG_PATH / folder / "SSR_result.npz") as f:
             method_xis = f["method_xis"]
