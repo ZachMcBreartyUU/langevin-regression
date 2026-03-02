@@ -472,6 +472,7 @@ def choosing_plots(folder, choosing, method_name, suffix):
     plt.close(fig)
 
 
+# %%
 def poly_lib(
     x_sym,
     order: int,
@@ -833,7 +834,7 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
     \hline
 """
     table_str += (
-        "      " + " & ".join(["Method"] + equation_names) + "\\\\ \n \\hline \n"
+        "      " + " & ".join(["Method"] + equation_names) + "\\\\ \n  \\hline \n"
     )
     table_str_drift = table_str
     table_str_diffu = table_str
@@ -844,7 +845,7 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
             ["Truth"]
             + ["$" + sympy.latex(sympy.N(expr, 2)) + "$" for expr in true_drift_exprs]
         )
-        + "\\\\ \n \\hline \n"
+        + "\\\\ \n  \\hline \n"
     )
     table_str_diffu += (
         "    "
@@ -852,7 +853,7 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
             ["Truth"]
             + ["$" + sympy.latex(sympy.N(expr, 2)) + "$" for expr in true_diffu_exprs]
         )
-        + "\\\\ \n \\hline \n"
+        + "\\\\ \n  \\hline \n"
     )
     for regression_method_number in range(len(regression_method_names)):
         table_str_drift += "    " + " & ".join(
