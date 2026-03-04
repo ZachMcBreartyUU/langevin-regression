@@ -891,6 +891,7 @@ for equation_number in range(len(equation_names)):
             reg_method_name,
             f"dx = ({sympy.N(found_drift_expr, 2)}) dt + {sympy.sqrt(sympy.N(2*found_diffu_expr, 2))} dW",
         )
+    del timeseries, KM, val_timeseries, val_KM, centers, pdf, drift, diffusion
 
     print("\n\n")
     np.savez(

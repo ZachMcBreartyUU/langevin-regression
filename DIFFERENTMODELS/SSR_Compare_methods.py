@@ -823,6 +823,7 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
 
         all_drift_exprs.append(found_drift_exprs)
         all_diffu_exprs.append(found_diffu_exprs)
+        del KM, centers, pdf, drift, diffusion
 
     all_drift_exprs = np.asarray(all_drift_exprs)
     all_diffu_exprs = np.asarray(all_diffu_exprs)
