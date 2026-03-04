@@ -644,6 +644,7 @@ target_metadata = {
     "ep1": None,  # fill in later for each equation
     "x0": 0.0,
     "num_bins": num_bins,
+    "kernel": "gaussian",
 }
 
 # %%

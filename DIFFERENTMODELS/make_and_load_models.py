@@ -13,6 +13,7 @@ import symengine
 from jitcsde import jitcsde, y
 
 from kramersmoyal import km
+from kramersmoyal.kernels import gaussian, epanechnikov
 
 
 def _is_metadata_right(
@@ -34,9 +35,7 @@ def _is_metadata_right(
         "ep1",
         "x0",
     ]
-    KM_checks = [
-        "num_bins",
-    ]
+    KM_checks = ["num_bins", "kernel"]
     for check in timeseries_checks:
         if check not in metadata:
             return False, False
@@ -195,7 +194,12 @@ def _generate_KM(i, edges, models_dir, metadata, metadata_is_right, validation=F
     if metadata["EVEN_ABS"]:
         x_data = np.append(x_data, -x_data)
 
-    kmc, centers = km(x_data[..., None], bins=(edges,), powers=2)  # type: ignore
+    if metadata["kernel"] == "gaussian":
+        kernel = gaussian
+    else:
+        kernel = epanechnikov
+
+    kmc, centers = km(x_data[..., None], bins=(edges,), powers=2, kernel=kernel)  # type: ignore
     pdf, moment_1, moment_2 = kmc
     centers = centers[0]
     pdf /= np.nansum(pdf * (edges[1] - edges[0]))
