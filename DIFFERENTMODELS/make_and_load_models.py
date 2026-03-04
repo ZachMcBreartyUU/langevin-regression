@@ -18,13 +18,14 @@ from kramersmoyal import km
 def _is_metadata_right(
     models_dir: Path,
     target_metadata: dict,
-):
+) -> tuple[bool, bool]:
+    """timeseries check, KM check"""
     if not (models_dir / "metadata.json").exists():
-        return False
+        return False, False
     with open(models_dir / "metadata.json") as metadata_file:
-        metadata = json.load(metadata_file)
+        metadata: dict = json.load(metadata_file)
 
-    checks = [
+    timeseries_checks = [
         "num_datapoints",
         "dt",
         "EVEN_ABS",
@@ -32,12 +33,21 @@ def _is_metadata_right(
         "ep0",
         "ep1",
         "x0",
+    ]
+    KM_checks = [
         "num_bins",
     ]
-    for check in checks:
+    for check in timeseries_checks:
+        if check not in metadata:
+            return False, False
         if metadata[check] != target_metadata[check]:
-            return False
-    return True
+            return False, False
+    for check in KM_checks:
+        if check not in metadata:
+            return True, False
+        if metadata[check] != target_metadata[check]:
+            return True, False
+    return True, True
 
 
 def _check_all_exist(models_dir: Path, NUM_DATASETS: int, filename_template: str):
@@ -274,16 +284,15 @@ def get_timeseries_and_KM(
     # Check if the models directory exists
     models_dir.mkdir(parents=True, exist_ok=True)
     # Check if there is metadata and that it is correct
-    metadata_is_right = _is_metadata_right(models_dir, target_metadata)
-    if not metadata_is_right:
-        target_metadata["min_x"] = target_metadata["x0"]
-        target_metadata["max_x"] = target_metadata["x0"]
-        write_metadata(models_dir, target_metadata)
+    timeseries_meta_correct, KM_meta_correct = _is_metadata_right(
+        models_dir, target_metadata
+    )
+    write_metadata(models_dir, target_metadata)
     generate_dataseries(
         models_dir,
         NUM_DATASETS,
         NUM_VALIDATION_DATASETS,
-        metadata_is_right=metadata_is_right,
+        metadata_is_right=timeseries_meta_correct,
         NUM_CPUS=NUM_CPUS,
     )
     generate_KM(
@@ -291,7 +300,7 @@ def get_timeseries_and_KM(
         NUM_DATASETS,
         NUM_VALIDATION_DATASETS,
         NUM_CPUS=NUM_CPUS,
-        metadata_is_right=metadata_is_right,
+        metadata_is_right=KM_meta_correct,
         SUGGESTED_MIN_MAX=SUGGESTED_MIN_MAX,
     )
     return (
