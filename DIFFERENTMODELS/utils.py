@@ -4,7 +4,7 @@ from time import time
 from functools import reduce, partial
 
 import numpy as np
-from numpy.fft import fft, fftn, fftfreq, ifftn
+from numpy.fft import fft, ifft, fftn, fftfreq, ifftn
 from scipy.optimize import minimize
 
 
@@ -430,5 +430,57 @@ class SteadyFP:
         q_hat = np.linalg.lstsq(self.A[1:, 1:], -self.A[1:, 0], rcond=1e-6)[0]
         q_hat = np.append([1], q_hat)
         hist = np.real(ifftn(np.reshape(q_hat, self.N))) / np.prod(self.dx)
+        hist /= np.nansum(hist * self.dx)
+        return hist
+
+
+class SteadyFP_0D:
+    """
+    Solver object for steady-state Fokker-Planck equation
+
+    Initializing this independently avoids having to re-initialize all of the indexing arrays
+      for repeated loops with different drift and diffusion
+
+    Jared Callaham (2020)
+    """
+
+    def __init__(self, N: int, dx: float):
+        """
+        N - array of ndim ints: grid resolution N[0] x N[1] x ... x N[ndim-1]
+        dx - grid spacing
+        """
+
+        self.ndim = 1
+        self.N = N
+        self.dx = dx
+
+        self.k = 2 * np.pi * fftfreq(self.N, dx)
+        self.idx = np.zeros((self.N, self.N), dtype=np.int32)
+        for i in range(self.N):
+            self.idx[i, :] = i - np.arange(self.N)
+
+    def precompute_operator(self, f, a):
+        """
+        f - array of drift coefficients on domain (ndim x N[0] x N[1] x ... x N[ndim])
+        a - array of diffusion coefficients on domain (ndim x N[0] x N[1] x ... x N[ndim])
+        NOTE: To generalize to covariate noise, would need to add a dimension to a
+        """
+        f_hat = self.dx * fft(f)
+        a_hat = self.dx * fft(a)
+
+        # Set up spectral projection operator
+        self.A = np.einsum("i,ij->ij", -1j * self.k, f_hat[self.idx]) + np.einsum(
+            "i,ij->ij", -self.k**2, a_hat[self.idx]
+        )
+
+    def solve(self, f, a):
+        """
+        Solve Fokker-Planck equation from input drift coefficients
+        """
+        self.precompute_operator(f, a)
+
+        q_hat = np.linalg.lstsq(self.A[1:, 1:], -self.A[1:, 0], rcond=1e-6)[0]
+        q_hat = np.append([1], q_hat)
+        hist = np.real(ifft(np.reshape(q_hat, self.N))) / np.prod(self.dx)
         hist /= np.nansum(hist * self.dx)
         return hist
