@@ -15,9 +15,11 @@ from kramersmoyal import km
 from utils import sindy_model, jeffreys_divergence, SteadyFP
 
 # %%
-SCRATCH_PATH = Path(f"/scratch/seismology/zach/softglass/compare_methods/")
+SCRATCH_PATH = Path(f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods/")
 SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
-FIG_PATH = Path(f"/scratch/seismology/zach/softglass/compare_methods_stat_odd/")
+FIG_PATH = Path(
+    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_stat_odd/"
+)
 FIG_PATH.mkdir(parents=True, exist_ok=True)
 
 
