@@ -615,21 +615,32 @@ diffusion_coefficients = [
 even_abs_simulation = [False, False, True, True]
 even_abs_library = [False, False, False, False]
 # %%
-regression_method_names = [
+regression_method_names_diffusion = [
+    "Stats",
+    "Stats",
+    "Stats",
+    "KM_Stats",
+    "KM_Stats",
+    "KM_Stats",
     "KM",
     "KM",
-    "KM_Jef",
-    "KM_Jef",
-    "KM_Jef",
-    "Jef",
-    "Jef",
-    "Jef",
+    "KM",
 ]
-
-alpha_vals = [0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0]
+alpha_vals = [0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0]
 opt_funcs_diffusion = [opt_fun_C] * len(alpha_vals)
 
-beta_vals = [0.5, 1.0, 0.0, 0.5, 1.0, 0.0, 0.5, 1.0]
+regression_method_names_drift = [
+    "Stats",
+    "KM_Stats",
+    "KM",
+    "Stats",
+    "KM_Stats",
+    "KM",
+    "Stats",
+    "KM_Stats",
+    "KM",
+]
+beta_vals = [0.0, 0.5, 1.0, 0.0, 0.5, 1.0, 0.0, 0.5, 1.0]
 opt_funcs_drift = [opt_fun_A] * len(beta_vals)
 
 # %%
@@ -650,9 +661,11 @@ target_metadata = {
     "num_bins": num_bins,
     "kernel": "gaussian",
 }
+drift_plus = 1
+diffusion_plus = 3
 
 # %%
-timeseries_skip = 100
+timeseries_skip = 1000
 for equation_number in range(len(equation_names)):
     name = equation_names[equation_number]
     folder = folders[equation_number]
@@ -690,16 +703,16 @@ for equation_number in range(len(equation_names)):
 
     # make libraries for drift and diffusion
     x_sym = sympy.symbols("x")
-    num_diffusion = 4
+    num_diffusion = 3 + diffusion_plus
     lib_diffu_expr, lib_diffu_KM, lib_diffu_timeseries = poly_lib(
         x_sym, num_diffusion, centers, xs, False, False
     )
-    mask = np.all(np.isfinite(diffusion), axis=0)
+    mask = np.all(np.isfinite(diffusion) + (diffusion > 0), axis=0)
     xi_C_0 = np.abs(
         np.average(lstsq(lib_diffu_KM.T[mask], diffusion.T[mask])[0], axis=1)
     )
-
-    num_drift = len(drift_coef) + 1
+    xi_C_0[1::2] /= 10  # odd terms are not great when taking sqrt
+    num_drift = len(drift_coef) + drift_plus
     lib_drift_expr, lib_drift_KM, lib_drift_timeseries = poly_lib(
         x_sym,
         num_drift,
@@ -710,6 +723,7 @@ for equation_number in range(len(equation_names)):
     )
     mask = np.all(np.isfinite(drift), axis=0)
     xi_A_0 = np.average(lstsq(lib_drift_KM.T[mask], drift.T[mask])[0], axis=1)
+    xi_A_0[-1] = -np.abs(xi_A_0[-1])
 
     # regress each method against the same dataset with the same library functions,
     # the same initial conditions, and record the resulting final equation
@@ -734,14 +748,15 @@ for equation_number in range(len(equation_names)):
     method_xi_A_s = []
     method_v_A_s = []
 
-    for regression_method_number in range(len(regression_method_names)):
+    for regression_method_number in range(len(regression_method_names_diffusion)):
         start = time()
-        reg_method_name = regression_method_names[regression_method_number]
+        reg_method_name_diffusion = regression_method_names_diffusion[
+            regression_method_number
+        ]
         alpha_val = alpha_vals[regression_method_number]
         opt_func_diffusion = opt_funcs_diffusion[regression_method_number]
-        print(reg_method_name)
 
-        print("Diffusion", alpha_val, opt_func_diffusion)
+        print("Diffusion", reg_method_name_diffusion, alpha_val, opt_func_diffusion)
         xi_C_s, V_C_s = SSR_loop_diffusion(
             opt_func_diffusion,
             xi_C_0,
@@ -759,7 +774,7 @@ for equation_number in range(len(equation_names)):
             V_C_s,
             xi_C_s,
             lib_diffu_expr,
-            f"{regression_method_number}_{reg_method_name}",
+            f"{regression_method_number}_{reg_method_name_diffusion}",
             suffix=folder,
         )
 
@@ -774,7 +789,9 @@ for equation_number in range(len(equation_names)):
                 + "$"
             )
             fdiffu_KM = lib_diffu_KM.T @ xi_C
-            fdiffu_timeseries = lib_diffu_timeseries.transpose((1, 2, 0)) @ xi_C
+            fdiffu_timeseries = np.sqrt(
+                2 * lib_diffu_timeseries.transpose((1, 2, 0)) @ xi_C
+            )
             (fpdf,), _ = km(
                 (dxs / fdiffu_timeseries).flatten(), powers=0, bins=(normal_dist_edges,)  # type: ignore
             )
@@ -787,7 +804,7 @@ for equation_number in range(len(equation_names)):
                 normal_dist_centers,
                 normal_dist,
                 diffu_expr,
-                f"{np.count_nonzero(xi_C)}_{regression_method_number}_{reg_method_name}",
+                f"{np.count_nonzero(xi_C)}_{regression_method_number}_{reg_method_name_diffusion}",
                 folder,
             )
 
@@ -796,10 +813,10 @@ for equation_number in range(len(equation_names)):
         choosing_plots(
             FIG_PATH / folder,
             choosing,
-            f"C_{regression_method_number}_{reg_method_name}",
+            f"C_{regression_method_number}_{reg_method_name_diffusion}",
             folder,
         )
-        chosen = np.nonzero(choosing > np.max(choosing) / 5)[0][0]
+        chosen = np.nonzero(choosing > np.nanmax(choosing) / 5)[0][0]
 
         best_C_xi = xi_C_s[chosen]
 
@@ -810,11 +827,12 @@ for equation_number in range(len(equation_names)):
             2 * lib_diffu_timeseries.transpose((1, 2, 0)) @ best_C_xi
         )
 
+        reg_method_name_drift = regression_method_names_drift[regression_method_number]
         beta_val = beta_vals[regression_method_number]
         opt_func_drift = opt_funcs_drift[regression_method_number]
 
         # With fixed diffusion, determine the best xi_A via SSR_loop_drift #
-        print("Drift", beta_val, opt_func_drift)
+        print("Drift", reg_method_name_drift, beta_val, opt_func_drift)
         xi_A_s, V_A_s = SSR_loop_drift(
             opt_func_drift,
             xi_A_0,
@@ -834,20 +852,20 @@ for equation_number in range(len(equation_names)):
             V_A_s,
             xi_A_s,
             lib_drift_expr,
-            f"{regression_method_number}_{reg_method_name}",
+            f"{regression_method_number}_{reg_method_name_diffusion}_{reg_method_name_drift}",
             suffix=folder,
         )
 
         method_xi_A_s.append(xi_A_s)
         method_v_A_s.append(V_A_s)
         end = time()
-        print(f"Drift SSR time: {end-start}s\n")
+        print(f"Drift SSR time: {end-start}s")
         for xi_A in xi_A_s:
             drift_expr = "$" + sympy.latex(sympy.N(lib_drift_expr.T @ xi_A, 2)) + "$"
             fdrift_KM = lib_drift_KM.T @ xi_A
             fdrift_timeseries = lib_drift_timeseries.transpose((1, 2, 0)) @ xi_A
             (fpdf,), _ = km(
-                ((dxs - fdrift_timeseries) / fdiffu_timeseries).flatten(), powers=0, bins=(normal_dist_edges,)  # type: ignore
+                ((dxs - fdrift_timeseries * dt) / found_B_timeseries).flatten(), powers=0, bins=(normal_dist_edges,)  # type: ignore
             )
             fpdf /= np.nansum(fpdf * (normal_dist_edges[1] - normal_dist_edges[0]))
             drift_plots_one_method(
@@ -858,19 +876,18 @@ for equation_number in range(len(equation_names)):
                 normal_dist_centers,
                 normal_dist,
                 drift_expr,
-                f"{np.count_nonzero(xi_A)}_{regression_method_number}_{reg_method_name}",
+                f"{np.count_nonzero(xi_A)}_{regression_method_number}_{reg_method_name_diffusion}_{reg_method_name_drift}",
                 folder,
             )
-
         # Choose best xi_A #
         choosing = (V_A_s[1:] - V_A_s[:-1]) / V_A_s[:-1]
         choosing_plots(
             FIG_PATH / folder,
             choosing,
-            f"{regression_method_number}_{reg_method_name}",
+            f"A_{regression_method_number}_{reg_method_name_diffusion}_{reg_method_name_drift}",
             folder,
         )
-        chosen = np.nonzero(choosing > np.max(choosing) / 5)[0][0]
+        chosen = np.nonzero(choosing > np.nanmax(choosing) / 5)[0][0]
         best_A_xi = xi_A_s[chosen]
 
         found_drift_expr = lib_drift_expr.T @ best_A_xi
@@ -886,15 +903,15 @@ for equation_number in range(len(equation_names)):
             found_pdf,
             found_drift_KM,
             found_diffu_KM,
-            "$" + sympy.latex(sympy.sqrt(sympy.N(2 * found_diffu_expr, 2))) + "$",
             "$" + sympy.latex(sympy.N(found_drift_expr, 2)) + "$",
-            f"{regression_method_number}_{reg_method_name}",
+            "$" + sympy.latex(sympy.sqrt(sympy.N(2 * found_diffu_expr, 2))) + "$",
+            f"{regression_method_number}_{reg_method_name_diffusion}_{reg_method_name_drift}",
             folder,
         )
 
         print(
-            reg_method_name,
-            f"dx = ({sympy.N(found_drift_expr, 2)}) dt + {sympy.sqrt(sympy.N(2*found_diffu_expr, 2))} dW",
+            reg_method_name_diffusion,
+            f"dx = ({sympy.N(found_drift_expr, 2)}) dt + {sympy.sqrt(sympy.N(2*found_diffu_expr, 2))} dW\n",
         )
     del timeseries, KM, val_timeseries, val_KM, centers, pdf, drift, diffusion
 

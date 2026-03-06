@@ -291,7 +291,10 @@ def get_timeseries_and_KM(
     timeseries_meta_correct, KM_meta_correct = _is_metadata_right(
         models_dir, target_metadata
     )
-    write_metadata(models_dir, target_metadata)
+    if not timeseries_meta_correct or not KM_meta_correct:
+        target_metadata["min_x"] = target_metadata["x0"]
+        target_metadata["max_x"] = target_metadata["x0"]
+        write_metadata(models_dir, target_metadata)
     generate_dataseries(
         models_dir,
         NUM_DATASETS,
