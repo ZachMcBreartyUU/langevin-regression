@@ -634,7 +634,8 @@ NUM_DATASETS = 10
 NUM_VALIDATION = 1
 NUM_CPUS = 10
 dt = 0.001
-num_bins = 100
+num_bins = 50
+
 target_metadata = {
     "num_datapoints": 10_000_000,
     "dt": dt,
