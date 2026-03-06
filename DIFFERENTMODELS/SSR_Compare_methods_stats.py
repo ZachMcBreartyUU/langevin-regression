@@ -93,13 +93,13 @@ def cost_drift(
     dt: float,
     beta: float = 0,
 ) -> float:
+    if xi_A[-1] > 0:
+        return np.inf
+
     if beta != 1:
         dw_P = (
             dx_timeseries - lib_A_timeseries.transpose((1, 2, 0)) @ xi_A * dt
         ) / B_model_timeseries
-        fig, ax = plt.subplots()
-        ax.plot(dw_P)
-        fig.savefig(FIG_PATH / "testing.png")
         (dw_P_hist,), _ = km(dw_P.flatten(), powers=0, bins=(normal_dist_edges,))  # type: ignore
         norm_dist_dx = normal_dist_edges[1] - normal_dist_edges[0]
         dw_P_hist /= np.nansum(dw_P_hist * norm_dist_dx)
@@ -549,8 +549,10 @@ def SSR_loop_drift(
             if len(tmp_active) == 0:
                 continue
 
+            xi_0_A_reduced = xi_A_0[tmp_active]
+            xi_0_A_reduced[-1] = -np.abs(xi_0_A_reduced[-1])
             params = [
-                xi_A_0[tmp_active],
+                xi_0_A_reduced,
                 lib_drift_KM[tmp_active],
                 lib_drift_timeseries[tmp_active],
                 drift_KM,
