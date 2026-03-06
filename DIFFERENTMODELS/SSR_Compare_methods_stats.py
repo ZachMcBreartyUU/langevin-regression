@@ -47,9 +47,9 @@ def cost_diffusion(
     else:
         jef_diverg = 0
 
-    diffusion_fidelity = np.nansum(
-        ((lib_C_KM.T @ xi_C)[None, ...] - diffusion_KM) ** 2
-    ) / np.nansum(diffusion_KM**2)
+    diffusion_fidelity = np.nansum((C_km - diffusion_KM) ** 2) / np.nansum(
+        diffusion_KM**2
+    )
     return (1 - alpha) * jef_diverg + alpha / 2 * diffusion_fidelity
 
 
