@@ -525,8 +525,8 @@ def SSR_loop_drift(
     beta,
 ):
     n_terms = len(lib_drift_KM)
-    min_xis = np.zeros((n_terms - 1, n_terms))
-    min_Vs = np.full((n_terms - 1), np.inf)
+    min_xis = np.zeros((n_terms, n_terms))
+    min_Vs = np.full((n_terms), np.inf)
     min_xis[0], min_Vs[0] = opt_func_drift(
         xi_A_0,
         lib_drift_KM,
@@ -541,7 +541,7 @@ def SSR_loop_drift(
     )
     active = np.array(list(range(n_terms)))
 
-    for k in range(1, n_terms - 1):
+    for k in range(1, n_terms):
         params_list = []
         valid_indices = []
         for j in range(len(active)):
@@ -556,8 +556,8 @@ def SSR_loop_drift(
                 lib_drift_KM[tmp_active],
                 lib_drift_timeseries[tmp_active],
                 drift_KM,
-                found_B_timeseries,
                 dx_timeseries,
+                found_B_timeseries,
                 normal_dist,
                 normal_dist_edges,
                 dt,
