@@ -804,11 +804,6 @@ for i, (choosing_method, cmn) in enumerate(zip(choose_methods, choose_method_nam
             drift_xi = best_xi[:num_drift]
             diffu_xi = best_xi[num_drift:]
 
-            found_drift = lib_drift_KM.T @ drift_xi
-            found_diffu = lib_diffu_KM.T @ diffu_xi
-            found_pdf = sfp.solve(found_drift, found_diffu)
-            found_pdf /= np.sum(found_pdf * (KM[0][1] - KM[0][0]))
-
             found_drift_expr = lib_drift_expr.T @ drift_xi
             found_diffu_expr = lib_diffu_expr.T @ diffu_xi
 
