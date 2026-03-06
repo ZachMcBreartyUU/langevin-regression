@@ -32,10 +32,11 @@ def cost_diffusion(
     normal_dist_edges: np.ndarray,
     alpha: float,
 ) -> float:
+    C_ts = lib_C_timeseries.transpose((1, 2, 0)) @ xi_C
+    C_km = (lib_C_KM.T @ xi_C)[None, ...]
+    if np.any(C_ts < 0) or np.any(C_km) < 0:
+        return np.inf
     if alpha != 1:
-        C_ts = lib_C_timeseries.transpose((1, 2, 0)) @ xi_C
-        if np.any(C_ts < 0):
-            return np.inf
         dw_Q = dx_timeseries / np.sqrt(2 * C_ts)
         # pdf for each trajectory separately?
         (dw_Q_hist,), _ = km(dw_Q.flatten(), powers=0, bins=(normal_dist_edges,))  # type: ignore
