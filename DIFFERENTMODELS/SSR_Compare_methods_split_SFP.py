@@ -10,14 +10,14 @@ from numpy.linalg import lstsq
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 
-from make_and_load_models import get_timeseries_and_KM
+from make_and_load_models import get_timeseries_and_KM, load_and_stack_KM
 from utils import jeffreys_divergence, SteadyFP
 
 # %%
 SCRATCH_PATH = Path(f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods/")
 SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
 FIG_PATH = Path(
-    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_split_SFP_one_traj/"
+    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods/"
 )
 FIG_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -34,6 +34,9 @@ def cost_diffusion(
 
     diffu_val = lib_diffu.T @ xi_C
     diffusion_fid = np.nansum((diffusions - diffu_val) ** 2) / np.nansum(diffusions**2)
+    # diffusion_fid = np.nansum(np.abs(diffusions - diffu_val)) / np.nansum(
+    #     np.abs(diffusions)
+    # )
 
     if alpha != 1:
         pdf_lib = sfp.solve(np.nanmean(drifts, axis=0), diffu_val)
@@ -63,6 +66,7 @@ def cost_drift(
 
     drift_val = lib_drift.T @ xi_A
     drift_fid = np.nansum((drifts - drift_val) ** 2) / np.nansum(drifts**2)
+    # drift_fid = np.nansum(np.abs(drifts - drift_val)) / np.nansum(np.abs(drifts))
 
     if beta != 1:
         pdf_lib = sfp.solve(drift_val, np.nanmean(diffusions, axis=0))
@@ -438,6 +442,7 @@ def SSR_loop_diffusion(opt_func_diffusion, xi_C_0, KM, lib_diffu_KM, sfp, alpha)
     xi_C_0 = np.abs(
         np.average(lstsq(lib_diffu_KM.T[mask], diffusion.T[mask])[0], axis=1)
     )
+    # xi_C_0, _ = opt_func_diffusion(xi_C_0, KM, lib_diffu_KM, sfp, 1.0)
 
     min_xis[0], min_Vs[0] = opt_func_diffusion(xi_C_0, KM, lib_diffu_KM, sfp, alpha)
     active = np.array(list(range(n_terms)))
@@ -491,6 +496,7 @@ def SSR_loop_drift(opt_func_drift, xi_A_0, KM, lib_drift_KM, sfp, beta):
 
     mask = np.all(np.isfinite(drift), axis=0)
     xi_A_0 = np.average(lstsq(lib_drift_KM.T[mask], drift.T[mask])[0], axis=1)
+    # xi_A_0, _ = opt_func_drift(xi_A_0, KM, lib_drift_KM, sfp, 1.0)
 
     min_xis[0], min_Vs[0] = opt_func_drift(xi_A_0, KM, lib_drift_KM, sfp, beta)
     active = np.array(list(range(n_terms)))
@@ -565,26 +571,36 @@ diffusion_coefficients = [
 ]
 
 even_abs_simulation = [False, False, True, True]
-even_abs_library = [False, False, False, False]
+even_abs_library = [False, False, True, True]
 
 
 # %%
 regression_method_names_diffusion = [
     "SFP",
-    "SFP",
-    "SFP_KM",
+    # "SFP",
+    # "SFP_KM",
     "SFP_KM",
 ]
-alpha_vals = [0.0, 0.0, 0.5, 0.5]
+alpha_vals = [
+    0.0,
+    # 0.0,
+    # 0.5,
+    0.5,
+]
 opt_funcs_diffusion = [opt_func_diffusion] * len(alpha_vals)
 
 regression_method_names_drift = [
     "SFP",
-    "SFP_KM",
-    "SFP",
+    # "SFP_KM",
+    # "SFP",
     "SFP_KM",
 ]
-beta_vals = [0.0, 0.5, 0.0, 0.5]
+beta_vals = [
+    0.0,
+    # 0.5,
+    # 0.0,
+    0.5,
+]
 opt_funcs_drift = [opt_func_drift] * len(beta_vals)
 # %%
 NUM_DATASETS = 10
@@ -624,6 +640,7 @@ for equation_number in [0, 1, 2, 3]:  # range(len(equation_names)):
         SCRATCH_PATH / folder, target_metadata, NUM_DATASETS, NUM_VALIDATION, NUM_CPUS
     )
     del timeseries, val_timeseries
+    # KM = load_and_stack_KM(SCRATCH_PATH / folder, 10)
     centers, pdf, drift, diffusion = KM
     # could do this instead as |drift - mean| > N std for example
     # since the value of 0.0 could actually be real
@@ -786,7 +803,7 @@ for equation_number in [0, 1, 2, 3]:  # range(len(equation_names)):
             f"{regression_method_number}_{reg_method_name_diffusion}_{reg_method_name_drift}",
             folder,
         )
-    del KM, centers, pdf, drift, diffusion, val_KM
+    del KM, centers, pdf, drift, diffusion  # , val_KM
 
     print("\n\n")
     np.savez(
