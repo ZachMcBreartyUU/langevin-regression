@@ -14,10 +14,12 @@ from make_and_load_models import get_timeseries_and_KM, load_and_stack_KM
 from utils import jeffreys_divergence, SteadyFP
 
 # %%
-SCRATCH_PATH = Path(f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods/")
+SCRATCH_PATH = Path(
+    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_threshold/"
+)
 SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
 FIG_PATH = Path(
-    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods/"
+    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_threshold_PDF/"
 )
 FIG_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -156,6 +158,14 @@ def KM_plots(folder, KM, suffix=""):
         fig.savefig(folder / f"kramers_moyal_{suffix}.png")
     else:
         fig.savefig(folder / "kramers_moyal.png")
+
+    ax1.set_yscale("log")
+    ax2.set_ylim(-2, 2)
+
+    if suffix:
+        fig.savefig(folder / f"kramers_moyal_zoom_{suffix}.png")
+    else:
+        fig.savefig(folder / "kramers_moyal_zoom.png")
     plt.close(fig)
 
 
@@ -571,7 +581,7 @@ diffusion_coefficients = [
 ]
 
 even_abs_simulation = [False, False, True, True]
-even_abs_library = [False, False, True, True]
+even_abs_library = [False, False, False, False]
 
 
 # %%
@@ -605,7 +615,7 @@ opt_funcs_drift = [opt_func_drift] * len(beta_vals)
 # %%
 NUM_DATASETS = 10
 NUM_VALIDATION = 1
-NUM_CPUS = 10
+NUM_CPUS = 8
 dt = 0.001
 num_bins = 50
 target_metadata = {
@@ -637,9 +647,73 @@ for equation_number in [0, 1, 2, 3]:  # range(len(equation_names)):
     target_metadata["ep1"] = ep1
     target_metadata["coeffs"] = drift_coef
     timeseries, KM, val_timeseries, val_KM = get_timeseries_and_KM(
-        SCRATCH_PATH / folder, target_metadata, NUM_DATASETS, NUM_VALIDATION, NUM_CPUS
+        SCRATCH_PATH / folder,
+        target_metadata,
+        NUM_DATASETS,
+        NUM_VALIDATION,
+        NUM_CPUS,
+        (-2.0, 2.0),
     )
     del timeseries, val_timeseries
+    KM_plots(FIG_PATH / folder, KM, folder)
+    THRESH = 100_000
+    i = 0
+    _max_thresh = np.max(KM[1]) / THRESH
+    endsok = np.all(KM[1][:, 0] >= _max_thresh) and np.all(KM[1][:, -1] >= _max_thresh)
+    while not endsok:
+        i += 1
+        less_than_percent_max = KM[1] < np.max(KM[1]) / THRESH
+        greater_than = ~less_than_percent_max
+        firsts: list[int] = []
+        lasts: list[int] = []
+        for greaters in greater_than:
+            indices = np.nonzero(greaters)
+            first_idx = np.min(indices[0]).astype(int)
+            firsts.append(first_idx)
+            last_idx = np.max(indices[0]).astype(int)
+            lasts.append(last_idx)
+
+        first_idx: int = np.max(firsts)
+        last_idx: int = np.min(lasts)
+        centers_dx = KM[0][1] - KM[0][0]
+        if first_idx != 0:
+            first_idx -= 1
+            suggested_min = KM[0][first_idx]
+        else:
+            suggested_min = KM[0][0] - centers_dx
+
+        if last_idx != len(KM[0]) - 1:
+            last_idx += 1
+            suggested_max = KM[0][last_idx]
+        else:
+            suggested_max = KM[0][0] + centers_dx
+
+        suggested = (suggested_min, suggested_max)
+        print(
+            i,
+            (first_idx, last_idx),
+            suggested,
+            np.count_nonzero(greater_than),
+            "/",
+            np.size(KM[1]),
+        )
+        del KM, val_KM
+        timeseries, KM, val_timeseries, val_KM = get_timeseries_and_KM(
+            SCRATCH_PATH / folder,
+            target_metadata,
+            NUM_DATASETS,
+            NUM_VALIDATION,
+            NUM_CPUS,
+            suggested,
+        )
+        del timeseries, val_timeseries
+        _max_thresh = np.max(KM[1]) / THRESH
+        endsok = np.all(KM[1][:, 0] >= _max_thresh) and np.all(
+            KM[1][:, -1] >= _max_thresh
+        )
+
+        KM_plots(FIG_PATH / folder, KM, folder)
+
     # KM = load_and_stack_KM(SCRATCH_PATH / folder, 10)
     centers, pdf, drift, diffusion = KM
     # could do this instead as |drift - mean| > N std for example

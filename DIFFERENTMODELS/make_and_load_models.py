@@ -238,6 +238,7 @@ def generate_KM(
         edges = np.linspace(
             SUGGESTED_MIN_MAX[0], SUGGESTED_MIN_MAX[1], metadata["num_bins"] + 1
         )
+        metadata_is_right = False
     calls = []
     for i in range(NUM_DATASETS):
         calls.append((i, edges, models_dir, metadata, metadata_is_right, False))
