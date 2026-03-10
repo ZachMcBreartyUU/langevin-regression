@@ -14,12 +14,10 @@ from make_and_load_models import get_timeseries_and_KM, load_and_stack_KM
 from utils import jeffreys_divergence, SteadyFP
 
 # %%
-SCRATCH_PATH = Path(
-    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_threshold/"
-)
+SCRATCH_PATH = Path(f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods/")
 SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
 FIG_PATH = Path(
-    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_threshold_PDF/"
+    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_l1_norm/"
 )
 FIG_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -35,10 +33,9 @@ def cost_diffusion(
     centers, pdfs, drifts, diffusions = KM
 
     diffu_val = lib_diffu.T @ xi_C
-    diffusion_fid = np.nansum((diffusions - diffu_val) ** 2) / np.nansum(diffusions**2)
-    # diffusion_fid = np.nansum(np.abs(diffusions - diffu_val)) / np.nansum(
-    #     np.abs(diffusions)
-    # )
+    diffusion_fid = np.nansum(np.abs(diffusions - diffu_val)) / np.nansum(
+        np.abs(diffusions)
+    )
 
     if alpha != 1:
         pdf_lib = sfp.solve(np.nanmean(drifts, axis=0), diffu_val)
@@ -67,8 +64,7 @@ def cost_drift(
         return np.inf
 
     drift_val = lib_drift.T @ xi_A
-    drift_fid = np.nansum((drifts - drift_val) ** 2) / np.nansum(drifts**2)
-    # drift_fid = np.nansum(np.abs(drifts - drift_val)) / np.nansum(np.abs(drifts))
+    drift_fid = np.nansum(np.abs(drifts - drift_val)) / np.nansum(np.abs(drifts))
 
     if beta != 1:
         pdf_lib = sfp.solve(drift_val, np.nanmean(diffusions, axis=0))
@@ -449,10 +445,7 @@ def SSR_loop_diffusion(opt_func_diffusion, xi_C_0, KM, lib_diffu_KM, sfp, alpha)
 
     mask = np.all(np.isfinite(diffusion), axis=0)
 
-    xi_C_0 = np.abs(
-        np.average(lstsq(lib_diffu_KM.T[mask], diffusion.T[mask])[0], axis=1)
-    )
-    # xi_C_0, _ = opt_func_diffusion(xi_C_0, KM, lib_diffu_KM, sfp, 1.0)
+    xi_C_0, _ = opt_func_diffusion(xi_C_0, KM, lib_diffu_KM, sfp, 1.0)
 
     min_xis[0], min_Vs[0] = opt_func_diffusion(xi_C_0, KM, lib_diffu_KM, sfp, alpha)
     active = np.array(list(range(n_terms)))
@@ -505,8 +498,7 @@ def SSR_loop_drift(opt_func_drift, xi_A_0, KM, lib_drift_KM, sfp, beta):
     min_Vs = np.full((n_terms), np.inf)
 
     mask = np.all(np.isfinite(drift), axis=0)
-    xi_A_0 = np.average(lstsq(lib_drift_KM.T[mask], drift.T[mask])[0], axis=1)
-    # xi_A_0, _ = opt_func_drift(xi_A_0, KM, lib_drift_KM, sfp, 1.0)
+    xi_A_0, _ = opt_func_drift(xi_A_0, KM, lib_drift_KM, sfp, 1.0)
 
     min_xis[0], min_Vs[0] = opt_func_drift(xi_A_0, KM, lib_drift_KM, sfp, beta)
     active = np.array(list(range(n_terms)))
@@ -590,12 +582,14 @@ regression_method_names_diffusion = [
     # "SFP",
     # "SFP_KM",
     "SFP_KM",
+    "KM",
 ]
 alpha_vals = [
     0.0,
     # 0.0,
     # 0.5,
     0.5,
+    1.0,
 ]
 opt_funcs_diffusion = [opt_func_diffusion] * len(alpha_vals)
 
@@ -604,12 +598,14 @@ regression_method_names_drift = [
     # "SFP_KM",
     # "SFP",
     "SFP_KM",
+    "KM",
 ]
 beta_vals = [
     0.0,
     # 0.5,
     # 0.0,
     0.5,
+    1.0,
 ]
 opt_funcs_drift = [opt_func_drift] * len(beta_vals)
 # %%
@@ -652,67 +648,9 @@ for equation_number in [0, 1, 2, 3]:  # range(len(equation_names)):
         NUM_DATASETS,
         NUM_VALIDATION,
         NUM_CPUS,
-        (-2.0, 2.0),
+        # (-2.0, 2.0),
     )
     del timeseries, val_timeseries
-    KM_plots(FIG_PATH / folder, KM, folder)
-    THRESH = 100_000
-    i = 0
-    _max_thresh = np.max(KM[1]) / THRESH
-    endsok = np.all(KM[1][:, 0] >= _max_thresh) and np.all(KM[1][:, -1] >= _max_thresh)
-    while not endsok:
-        i += 1
-        less_than_percent_max = KM[1] < np.max(KM[1]) / THRESH
-        greater_than = ~less_than_percent_max
-        firsts: list[int] = []
-        lasts: list[int] = []
-        for greaters in greater_than:
-            indices = np.nonzero(greaters)
-            first_idx = np.min(indices[0]).astype(int)
-            firsts.append(first_idx)
-            last_idx = np.max(indices[0]).astype(int)
-            lasts.append(last_idx)
-
-        first_idx: int = np.max(firsts)
-        last_idx: int = np.min(lasts)
-        centers_dx = KM[0][1] - KM[0][0]
-        if first_idx != 0:
-            first_idx -= 1
-            suggested_min = KM[0][first_idx]
-        else:
-            suggested_min = KM[0][0] - centers_dx
-
-        if last_idx != len(KM[0]) - 1:
-            last_idx += 1
-            suggested_max = KM[0][last_idx]
-        else:
-            suggested_max = KM[0][0] + centers_dx
-
-        suggested = (suggested_min, suggested_max)
-        print(
-            i,
-            (first_idx, last_idx),
-            suggested,
-            np.count_nonzero(greater_than),
-            "/",
-            np.size(KM[1]),
-        )
-        del KM, val_KM
-        timeseries, KM, val_timeseries, val_KM = get_timeseries_and_KM(
-            SCRATCH_PATH / folder,
-            target_metadata,
-            NUM_DATASETS,
-            NUM_VALIDATION,
-            NUM_CPUS,
-            suggested,
-        )
-        del timeseries, val_timeseries
-        _max_thresh = np.max(KM[1]) / THRESH
-        endsok = np.all(KM[1][:, 0] >= _max_thresh) and np.all(
-            KM[1][:, -1] >= _max_thresh
-        )
-
-        KM_plots(FIG_PATH / folder, KM, folder)
 
     # KM = load_and_stack_KM(SCRATCH_PATH / folder, 10)
     centers, pdf, drift, diffusion = KM
