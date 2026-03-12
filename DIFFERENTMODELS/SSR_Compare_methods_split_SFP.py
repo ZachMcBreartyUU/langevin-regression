@@ -17,7 +17,7 @@ from utils import jeffreys_divergence, SteadyFP
 SCRATCH_PATH = Path(f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods/")
 SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
 FIG_PATH = Path(
-    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_l1_norm/"
+    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_soft_triple/"
 )
 FIG_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -438,14 +438,14 @@ def poly_lib(
     return lib_expr, lib_KM
 
 
-def SSR_loop_diffusion(opt_func_diffusion, xi_C_0, KM, lib_diffu_KM, sfp, alpha):
+def SSR_loop_diffusion(opt_func_diffusion, xi_C_0_in, KM, lib_diffu_KM, sfp, alpha):
     n_terms = len(lib_diffu_KM)
     min_xis = np.zeros((n_terms, n_terms))
     min_Vs = np.full((n_terms), np.inf)
 
     mask = np.all(np.isfinite(diffusion), axis=0)
 
-    xi_C_0, _ = opt_func_diffusion(xi_C_0, KM, lib_diffu_KM, sfp, 1.0)
+    xi_C_0, _ = opt_func_diffusion(xi_C_0_in, KM, lib_diffu_KM, sfp, 1.0)
 
     min_xis[0], min_Vs[0] = opt_func_diffusion(xi_C_0, KM, lib_diffu_KM, sfp, alpha)
     active = np.array(list(range(n_terms)))
@@ -457,11 +457,14 @@ def SSR_loop_diffusion(opt_func_diffusion, xi_C_0, KM, lib_diffu_KM, sfp, alpha)
             tmp_active = np.delete(active.copy(), j)
             if len(tmp_active) == 0:
                 continue
-            xi_C_0_tmp = np.abs(
-                np.average(
-                    lstsq(lib_diffu_KM[tmp_active].T[mask], diffusion.T[mask])[0],
-                    axis=1,
-                )
+            # xi_C_0_tmp = np.abs(
+            #     np.average(
+            #         lstsq(lib_diffu_KM[tmp_active].T[mask], diffusion.T[mask])[0],
+            #         axis=1,
+            #     )
+            # )
+            xi_C_0_tmp, _ = opt_func_diffusion(
+                xi_C_0_in[tmp_active], KM, lib_diffu_KM[tmp_active], sfp, 1.0
             )
 
             params = [
@@ -492,13 +495,13 @@ def SSR_loop_diffusion(opt_func_diffusion, xi_C_0, KM, lib_diffu_KM, sfp, alpha)
     return min_xis, min_Vs
 
 
-def SSR_loop_drift(opt_func_drift, xi_A_0, KM, lib_drift_KM, sfp, beta):
+def SSR_loop_drift(opt_func_drift, xi_A_0_in, KM, lib_drift_KM, sfp, beta):
     n_terms = len(lib_drift_KM)
     min_xis = np.zeros((n_terms, n_terms))
     min_Vs = np.full((n_terms), np.inf)
 
     mask = np.all(np.isfinite(drift), axis=0)
-    xi_A_0, _ = opt_func_drift(xi_A_0, KM, lib_drift_KM, sfp, 1.0)
+    xi_A_0, _ = opt_func_drift(xi_A_0_in, KM, lib_drift_KM, sfp, 1.0)
 
     min_xis[0], min_Vs[0] = opt_func_drift(xi_A_0, KM, lib_drift_KM, sfp, beta)
     active = np.array(list(range(n_terms)))
@@ -512,8 +515,11 @@ def SSR_loop_drift(opt_func_drift, xi_A_0, KM, lib_drift_KM, sfp, beta):
             if len(tmp_active) == 0:
                 continue
 
-            xi_A_0_tmp = np.average(
-                lstsq(lib_drift_KM[tmp_active].T[mask], drift.T[mask])[0], axis=1
+            # xi_A_0_tmp = np.average(
+            #     lstsq(lib_drift_KM[tmp_active].T[mask], drift.T[mask])[0], axis=1
+            # )
+            xi_A_0_tmp, _ = opt_func_drift(
+                xi_A_0_in[tmp_active], KM, lib_drift_KM[tmp_active], sfp, 1.0
             )
 
             params = [
@@ -550,12 +556,16 @@ equation_names = [
     "Triple Well",
     "Softglass (Pitchforking)",
     "Softglass (Normal)",
+    "Triple Well Pitch",
+    "Triple Well Norm",
 ]
 folders = [
     "DoubleWell",
     "TripleWell",
     "SoftglassPitchforking",
     "SoftglassNormal",
+    "TripleWellPitch",
+    "TripleWellNorm",
 ]
 drift_coefficients = [
     # 1, x, x|x|, x^3, x^3|x|, ...
@@ -563,17 +573,35 @@ drift_coefficients = [
     [0.0, -1.0, 0.0, 1.0, 0.0, -0.2],
     [0.0, -0.016, 0.0, 1.1, -1.0],
     [0.0, -0.016, 0.0, 1.1, -1.0],
+    [0.0, -0.016, 0.0, 0.7, 0.0, -0.7],
+    [0.0, -0.016, 0.0, 0.7, 0.0, -0.7],
 ]
 diffusion_coefficients = [
     # [epsilon_0, epsilon_1] -> diffu = sqrt(ep0 + ep1 x^2)
-    [0.3, 0.2],  # CHECK IF APPROPRIATE
-    [0.3, 0.1],  # CHECK IF APPROPRIATE
+    [0.3, 0.2],
+    [0.3, 0.1],
+    [1e-3, 0.1],
+    [1e-5, 0.1],
     [1e-3, 0.1],
     [1e-5, 0.1],
 ]
 
-even_abs_simulation = [False, False, True, True]
-even_abs_library = [False, False, False, False]
+even_abs_simulation = [
+    False,
+    False,
+    True,
+    True,
+    True,
+    True,
+]
+even_abs_library = [
+    False,
+    False,
+    False,
+    False,
+    False,
+    False,
+]
 
 
 # %%
@@ -611,7 +639,7 @@ opt_funcs_drift = [opt_func_drift] * len(beta_vals)
 # %%
 NUM_DATASETS = 10
 NUM_VALIDATION = 1
-NUM_CPUS = 8
+NUM_CPUS = 6
 dt = 0.001
 num_bins = 50
 target_metadata = {
@@ -630,7 +658,7 @@ diffusion_plus = 3
 
 
 # %%script true
-for equation_number in [0, 1, 2, 3]:  # range(len(equation_names)):
+for equation_number in [0, 1, 2, 3, 4, 5]:  # range(len(equation_names)):
     name = equation_names[equation_number]
     folder = folders[equation_number]
     print(name, folder)
