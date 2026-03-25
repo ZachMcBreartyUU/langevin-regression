@@ -127,20 +127,23 @@ def timeseries_plots(folder, timeseries, suffix="", slice_=slice(None, None, Non
             fig.savefig(folder / f"timeseries_{i}_{suffix}.png")
         else:
             fig.savefig(folder / f"timeseries_{i}.png")
+        plt.delaxes(ax)
         plt.close(fig)
 
 
 def KM_plots(folder, KM, suffix=""):
     centers, pdf_stack, drift_stack, diffusion_stack = KM
-    fig, (ax1, ax2, ax3) = plt.subplots(3, figsize=(6, 16), sharex=True)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, figsize=(6, 16))
 
-    ax1.plot(centers, pdf_stack.T, alpha=0.7)
+    ax1.plot(centers, pdf_stack.T, alpha=0.7, linestyle="", marker="x")
     ax1.set_ylabel("PDF, $P(x)$")
+    ax1.set_xlabel("$x$")
 
     ax2.plot(centers, drift_stack.T, alpha=0.7, linestyle="", marker="x")
     mean_vals = np.nanmean(drift_stack, axis=0)
     ax2.set_ylim(np.min(mean_vals), np.max(mean_vals))
     ax2.set_ylabel("Drift, $m^{(1)}(x)$")
+    ax2.set_xlabel("$x$")
 
     ax3.plot(centers, diffusion_stack.T, alpha=0.7, linestyle="", marker="x")
     mean_vals = np.nanmean(diffusion_stack, axis=0)
@@ -156,12 +159,15 @@ def KM_plots(folder, KM, suffix=""):
         fig.savefig(folder / "kramers_moyal.png")
 
     ax1.set_yscale("log")
-    ax2.set_ylim(-2, 2)
+    ax2.set_ylim(-0.1, 0.1)
 
     if suffix:
         fig.savefig(folder / f"kramers_moyal_zoom_{suffix}.png")
     else:
         fig.savefig(folder / "kramers_moyal_zoom.png")
+    plt.delaxes(ax1)
+    plt.delaxes(ax2)
+    plt.delaxes(ax3)
     plt.close(fig)
 
 
@@ -176,13 +182,13 @@ def diffusion_plots_one_method(
 ):
     centers, pdf_stack, drift_stack, diffusion_stack = KM
     fig, (ax1, ax2) = plt.subplots(2, figsize=(6, 13))
-    ax1.set_title(method_name)
-    ax1.plot(centers, pdf_stack.T, linestyle="-", label="KM")
-    ax1.plot(centers, found_pdf, linestyle="--", label="Model")
+    # ax1.set_title(method_name)
+    ax1.plot(centers, pdf_stack.T, linestyle="", marker="x", label="KM")
+    ax1.plot(centers, found_pdf, linestyle="-", label="Model")
     ax1.set_ylabel(r"PDF, $P(x)$")
     ax1.set_ylabel(r"$x$")
 
-    ax2.set_title(diffu_expr)
+    # ax2.set_title(diffu_expr)
     ax2.plot(centers, diffusion_stack.T, alpha=0.7, linestyle="", marker="x")
     ax2.plot(centers, found_diffusion, linestyle="-")
     ax2.set_ylabel("Diffusion, $m^{(2)}(x)$")
@@ -195,7 +201,7 @@ def diffusion_plots_one_method(
         np.max(mean_vals) + 0.01 * (min_ + max_),
     )
 
-    fig.legend()
+    # fig.legend()
     fig.tight_layout()
 
     if suffix:
@@ -224,13 +230,13 @@ def drift_plots_one_method(
 ):
     centers, pdf_stack, drift_stack, diffusion_stack = KM
     fig, (ax1, ax2) = plt.subplots(2, figsize=(6, 13))
-    ax1.set_title(method_name)
-    ax1.plot(centers, pdf_stack.T, linestyle="-", label="KM")
-    ax1.plot(centers, found_pdf, linestyle="--", label="Model")
+    # ax1.set_title(method_name)
+    ax1.plot(centers, pdf_stack.T, linestyle="", marker="x", label="KM")
+    ax1.plot(centers, found_pdf, linestyle="-", label="Model")
     ax1.set_ylabel(r"PDF, $P(x)$")
     ax1.set_xlabel(r"$x$")
 
-    ax2.set_title(drift_expr)
+    # ax2.set_title(drift_expr)
     ax2.plot(centers, drift_stack.T, alpha=0.7, linestyle="", marker="x")
     ax2.plot(centers, found_drift, linestyle="-")
     ax2.set_ylabel("Drift, $m^{(1)}(x)$")
@@ -243,7 +249,7 @@ def drift_plots_one_method(
         np.max(mean_vals) + 0.01 * (min_ + max_) / 2,
     )
 
-    fig.legend()
+    # fig.legend()
     fig.tight_layout()
 
     if suffix:
@@ -252,7 +258,7 @@ def drift_plots_one_method(
         fig.savefig(folder / f"drift_{method_name}.png")
 
     ax1.set_yscale("log")
-    ax2.set_ylim(-2, 2)
+    ax2.set_ylim(-0.1, 0.1)
 
     if suffix:
         fig.savefig(folder / f"drift_zoom_{method_name}_{suffix}.png")
@@ -275,15 +281,17 @@ def KM_plots_one_method(
 ):
     centers, pdf_stack, drift_stack, diffusion_stack = KM
     fig, (ax1, ax2, ax3) = plt.subplots(3, figsize=(6, 16))
-    ax1.set_title(method_name)
+    # ax1.set_title(method_name)
     ax1.plot(centers, pdf_stack.T, alpha=0.7, linestyle="", marker="x")
     ax1.plot(centers, found_pdf, linestyle="-", label="Model")
     ax1.set_ylabel("PDF, $P(x)$")
+    ax1.set_xlabel("$x$")
 
-    ax2.set_title(drift_expr)
+    # ax2.set_title(drift_expr)
     ax2.plot(centers, drift_stack.T, alpha=0.7, linestyle="", marker="x")
     ax2.plot(centers, found_drift, linestyle="-")
     ax2.set_ylabel("Drift, $m^{(1)}(x)$")
+    ax2.set_xlabel("$x$")
     mean_vals = np.nanmean(drift_stack, axis=0)
     min_ = np.abs(np.min(mean_vals))
     max_ = np.abs(np.max(mean_vals))
@@ -292,10 +300,11 @@ def KM_plots_one_method(
         np.max(mean_vals) + 0.01 * (min_ + max_) / 2,
     )
 
-    ax3.set_title(diffu_expr)
+    # ax3.set_title(diffu_expr)
     ax3.plot(centers, diffusion_stack.T, alpha=0.7, linestyle="", marker="x")
     ax3.plot(centers, found_diffusion, linestyle="-")
     ax3.set_ylabel("Diffusion, $m^{(2)}(x)$")
+    ax3.set_xlabel("$x$")
     mean_vals = np.nanmean(diffusion_stack, axis=0)
     min_ = np.abs(np.min(mean_vals))
     max_ = np.abs(np.max(mean_vals))
@@ -304,7 +313,7 @@ def KM_plots_one_method(
         np.max(mean_vals) + 0.01 * (min_ + max_),
     )
 
-    fig.legend()
+    # fig.legend()
     fig.tight_layout()
 
     if suffix:
@@ -331,13 +340,16 @@ def KM_plots_all_methods(
     fig, (ax1, ax2, ax3) = plt.subplots(3, figsize=(6, 16))
     ax1.plot(centers, pdf_stack.T, alpha=0.7, linestyle="", marker="x")
     ax1.set_ylabel("PDF, $P(x)$")
+    ax1.set_xlabel("$x$")
 
     ax2.plot(centers, drift_stack.T, alpha=0.7, linestyle="", marker="x")
     ax2.set_ylabel("Drift, $m^{(1)}(x)$")
+    ax2.set_xlabel("$x$")
     mean_vals = np.nanmean(drift_stack, axis=0)
     ax2.set_ylim(np.min(mean_vals), np.max(mean_vals))
     ax3.plot(centers, diffusion_stack.T, alpha=0.7, linestyle="", marker="x")
     ax3.set_ylabel("Diffusion, $m^{(2)}(x)$")
+    ax3.set_xlabel("$x$")
     mean_vals = np.nanmean(diffusion_stack, axis=0)
     ax3.set_ylim(np.min(mean_vals), np.max(mean_vals))
     for found_pdf, found_drift, found_diffusion, method_name in zip(
@@ -639,11 +651,11 @@ opt_funcs_drift = [opt_func_drift] * len(beta_vals)
 # %%
 NUM_DATASETS = 10
 NUM_VALIDATION = 1
-NUM_CPUS = 6
+NUM_CPUS = 10
 dt = 0.001
 num_bins = 50
 target_metadata = {
-    "num_datapoints": 10_000_000,
+    "num_datapoints": 100_000_000,
     "dt": dt,
     "EVEN_ABS": False,
     "coeffs": None,  # fill in later for each equation
@@ -658,7 +670,7 @@ diffusion_plus = 3
 
 
 # %%script true
-for equation_number in [0, 1, 2, 3, 4, 5]:  # range(len(equation_names)):
+for equation_number in [2, 3, 6, 7]:  # range(len(equation_names)):
     name = equation_names[equation_number]
     folder = folders[equation_number]
     print(name, folder)
@@ -689,7 +701,8 @@ for equation_number in [0, 1, 2, 3, 4, 5]:  # range(len(equation_names)):
     diffusion[diffusion == 0.0] = np.nan
     KM = (centers, pdf, drift, diffusion)
 
-    # timeseries_plots(FIG_PATH / folder, timeseries, folder, slice(0, 100_000, 1))
+    timeseries_plots(FIG_PATH / folder, timeseries, folder, slice(0, 100_000, 1))
+    del timeseries, val_timeseries
     KM_plots(FIG_PATH / folder, KM, folder)
 
     # make libraries for drift and diffusion
