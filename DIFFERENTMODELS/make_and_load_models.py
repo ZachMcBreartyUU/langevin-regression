@@ -164,14 +164,15 @@ def load_and_stack_timeseries(models_dir, NUM_DATASETS, validation=False):
 
 def set_metadata_min_max(models_dir, NUM_DATASETS):
     metadata = load_metadata(models_dir)
-    new_min = metadata["min_x"]
-    new_max = metadata["max_x"]
-    for i in range(NUM_DATASETS):
+    _, x_data = load_timeseries(models_dir / f"timeseries_{0}.npz")
+    new_min = np.nanmin(x_data)
+    new_max = np.nanmax(x_data)
+    for i in range(1, NUM_DATASETS):
         _, x_data = load_timeseries(models_dir / f"timeseries_{i}.npz")
-        self_min = np.min(x_data)
-        self_max = np.max(x_data)
-        new_min = min(new_min, self_min)
-        new_max = max(new_max, self_max)
+        self_min = np.nanmin(x_data)
+        self_max = np.nanmax(x_data)
+        new_min = max(new_min, self_min)
+        new_max = min(new_max, self_max)
     metadata["min_x"] = new_min
     metadata["max_x"] = new_max
     write_metadata(models_dir, metadata)
@@ -350,6 +351,28 @@ def delete_timeseries(models_dir: Path, prefix="timeseries"):
         if file.startswith(prefix):
             os.remove(models_dir / file)
             print(f"Removed file: {models_dir / file}")
+
+
+def plot_timeseries(models_dir, NUM_DATASETS, validation=False):
+    for j in range(NUM_DATASETS):
+        filename = f"timeseries_{j}.npz" if not validation else f"validation_{j}.npz"
+        figname = f"timeseries_{j}.png" if not validation else f"validation_{j}.png"
+        # figname_zoom = (
+        #     f"timeseries_zoom_{j}.png" if not validation else f"validation_{j}.png"
+        # )
+        times, x_data = load_timeseries(models_dir / filename)
+
+        fig, ax = plt.subplots()
+
+        ax.plot(times, x_data)
+        fig.savefig(models_dir / figname)
+
+        # ax.set_xlim(right=times[len(times) // 10])
+        # fig.savefig(models_dir / figname_zoom)
+
+        plt.delaxes(ax)
+        plt.close(fig)
+        del fig, ax, times, x_data
 
 
 def plot_models(models_dir, NUM_DATASETS):
