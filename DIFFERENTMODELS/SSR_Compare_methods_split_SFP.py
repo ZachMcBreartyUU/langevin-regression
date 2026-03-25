@@ -570,6 +570,8 @@ equation_names = [
     "Softglass (Normal)",
     "Triple Well Pitch",
     "Triple Well Norm",
+    "Softglass (Small Sigma)",
+    "Softglass (Medium Sigma)",
 ]
 folders = [
     "DoubleWell",
@@ -578,6 +580,8 @@ folders = [
     "SoftglassNormal",
     "TripleWellPitch",
     "TripleWellNorm",
+    "SoftglassSmallSigma",
+    "SoftglassMediumSigma",
 ]
 drift_coefficients = [
     # 1, x, x|x|, x^3, x^3|x|, ...
@@ -587,6 +591,8 @@ drift_coefficients = [
     [0.0, -0.016, 0.0, 1.1, -1.0],
     [0.0, -0.016, 0.0, 0.7, 0.0, -0.7],
     [0.0, -0.016, 0.0, 0.7, 0.0, -0.7],
+    [0.0, -0.016, 0.0, 0.4, -1.0],
+    [0.0, -0.016, 0.0, 0.7, -1.0],
 ]
 diffusion_coefficients = [
     # [epsilon_0, epsilon_1] -> diffu = sqrt(ep0 + ep1 x^2)
@@ -595,6 +601,8 @@ diffusion_coefficients = [
     [1e-3, 0.1],
     [1e-5, 0.1],
     [1e-3, 0.1],
+    [1e-5, 0.1],
+    [1e-5, 0.1],
     [1e-5, 0.1],
 ]
 
@@ -605,8 +613,12 @@ even_abs_simulation = [
     True,
     True,
     True,
+    True,
+    True,
 ]
 even_abs_library = [
+    False,
+    False,
     False,
     False,
     False,
@@ -690,7 +702,6 @@ for equation_number in [2, 3, 6, 7]:  # range(len(equation_names)):
         NUM_CPUS,
         # (-2.0, 2.0),
     )
-    del timeseries, val_timeseries
 
     # KM = load_and_stack_KM(SCRATCH_PATH / folder, 10)
     centers, pdf, drift, diffusion = KM
