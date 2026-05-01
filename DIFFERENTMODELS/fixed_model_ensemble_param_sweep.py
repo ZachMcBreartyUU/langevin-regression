@@ -3,7 +3,9 @@ from time import time
 from pathlib import Path
 from functools import partial
 from multiprocessing import Pool
+import itertools as it
 import json
+
 import symengine
 from jitcsde import jitcsde, y
 from kramersmoyal import km
@@ -66,8 +68,6 @@ def cost_diffusion(
         )
     else:
         reg_val = 0
-    # print("JEF:", reg_val)
-    # print("DIF:", diffusion_fid)
     return (1 - alpha) * reg_val + alpha * diffusion_fid
 
 
@@ -190,33 +190,7 @@ def diffusion_lib(x_sym, centers):
         lib_KM[k] = lamb(centers)
     
     return lib_expr, lib_KM
-# %%
 
-R_range = np.linspace(0, 1, 10)
-m_range = np.linspace(0, 2, 10)
-ep0_range = np.logspace(-7, -3, 10)
-ep1_range = np.linspace(0, 0.5, 10)
-np.savez(SCRATCH_PATH / 'RANGES.npz',
-         R_range=R_range,
-         m_range=m_range,
-         ep0_range=ep0_range,
-         ep1_range=ep1_range)
-
-R, m, ep0, ep1 = np.meshgrid(R_range, m_range, ep0_range, ep1_range, indexing='ij')
-
-
-# %%
-R_found = np.zeros_like(R)
-m_found = np.zeros_like(R)
-minus_one_found = np.zeros_like(R)
-ep0_found = np.zeros_like(R)
-ep1_found = np.zeros_like(R)
-
-dR = np.zeros_like(R)
-dm = np.zeros_like(R)
-dminus_one = np.zeros_like(R)
-dep0 = np.zeros_like(R)
-dep1 = np.zeros_like(R)
 
 # %%
 def _generate_dataserie(
@@ -250,7 +224,6 @@ def _generate_KM(i, edges, models_dir, x_data, dt):
     pdf /= np.nansum(pdf * (edges[1] - edges[0]))
     moment_1 /= dt
     moment_2 /= dt
-    # print(f"Saving KM {i+1}", flush=True)
     np.savez(
         models_dir / KM_file,
         centers=centers,
@@ -261,14 +234,14 @@ def _generate_KM(i, edges, models_dir, x_data, dt):
     return centers, pdf, moment_1, moment_2
 
 def generate(
-    models_dir, N_timesteps, N_bins, dt, R, m, ep0, ep1, NUM_DATASETS, NUM_CPUS=1
+    models_dir, N_timesteps, N_bins, dt, R_, m_, ep0_, ep1_, NUM_DATASETS
 ):
     calls = []
     for j in range(NUM_DATASETS):
-        calls.append((N_timesteps, dt, R, m, ep0, ep1))
+        calls.append((N_timesteps, dt, R_, m_, ep0_, ep1_))
 
-    with Pool(min(len(calls), NUM_CPUS)) as p:
-        x_data_all = p.starmap(_generate_dataserie, calls)
+    # with Pool(min(len(calls), NUM_CPUS)) as p:
+    x_data_all = list(it.starmap(_generate_dataserie, calls))
     min_ = np.max(np.min(x_data_all, axis=1))
     max_ = np.min(np.max(x_data_all, axis=1))
 
@@ -279,8 +252,8 @@ def generate(
     calls = []
     for i in range(NUM_DATASETS):
         calls.append((i, edges, models_dir, x_data_all[i], dt))
-    with Pool(min(len(calls), NUM_CPUS)) as p:
-        KMCs = p.starmap(_generate_KM, calls)
+    # with Pool(min(len(calls), NUM_CPUS)) as p:
+    KMCs = list(it.starmap(_generate_KM, calls))
     return KMCs
 
 def load_KM(models_dir, NUM_DATASETS):
@@ -291,46 +264,99 @@ def load_KM(models_dir, NUM_DATASETS):
             KMs.append([f['centers'],f['pdf'], f['moment_1'], f['moment_2'] ])
     return KMs
 
-#%%
-N_timesteps = 10_000_000
-N_bins = 20
-dt = 0.001
-NUM_DATASETS = 5
-NUM_CPUS = 5
-x_sym = sp.symbols('x')
-for Q in range(R.size):
-    I = np.unravel_index(Q, R.shape)
+# %%
+def do_run(I):
     MODEL_PATH = SCRATCH_PATH / f"run_{I[0]}_{I[1]}_{I[2]}_{I[3]}"
     MODEL_PATH.mkdir(parents=True, exist_ok=True)
 
     if True:
-        KMC = generate(MODEL_PATH, N_timesteps, N_bins, dt, R[I],m[I], ep0[I], ep1[I], NUM_DATASETS, NUM_CPUS)
+        KMC = generate(MODEL_PATH, N_timesteps, N_bins, dt, R[I], m[I], ep0[I], ep1[I], NUM_DATASETS)
     else:
         KMC = load_KM(MODEL_PATH, NUM_DATASETS)
 
     # PERFORM MINIMISATION
     centers = KMC[0][0]
     sfp = SteadyFP(N_bins, centers[1] - centers[0])
-    drift_lib_expr, drift_lib_KM = drift_lib(x_sym, centers)
-    diffu_lib_expr, diffu_lib_KM = diffusion_lib(x_sym, centers)
+    _, drift_lib_KM = drift_lib(x_sym, centers)
+    _, diffu_lib_KM = diffusion_lib(x_sym, centers)
     xi_drift_0 = np.zeros(3)
     xi_diffu_0 = np.zeros(2)
     xi_diffu_0[0] = 1
 
     xi_drifts, eval_drifts = opt_func_drift(xi_drift_0, KMC, drift_lib_KM, sfp, 0.5)
     xi_diffus, eval_diffus = opt_func_diffusion(xi_diffu_0, KMC, diffu_lib_KM, sfp, 0.5)
-
-    print(xi_drifts, eval_drifts)
-    print(xi_diffus, eval_diffus)
     
     # SAVE RESULTS
     np.savez(SCRATCH_PATH / f'run_{I[0]}_{I[1]}_{I[2]}_{I[3]}.npz', xi_drifts=xi_drifts,xi_diffus=xi_diffus,eval_drifts=eval_drifts,eval_diffus=eval_diffus)
+    xi_drift_mean = np.mean(xi_drifts, axis=0)
+    xi_drift_std = np.std(xi_drifts, axis=0)
+    xi_diffu_mean = np.mean(xi_diffus, axis=0)
+    xi_diffu_std = np.std(xi_diffus, axis=0)
+    return  xi_drift_mean, xi_drift_std, xi_diffu_mean, xi_diffu_std
 
+def load_run(I):
+    MODEL_PATH = SCRATCH_PATH / f"run_{I[0]}_{I[1]}_{I[2]}_{I[3]}.npz"
+    with np.load(MODEL_PATH) as f:
+        xi_drifts = f['xi_drifts']
+        xi_diffus = f['xi_diffus']
     xi_drift_mean = np.mean(xi_drifts, axis=0)
     xi_drift_std = np.std(xi_drifts, axis=0)
     xi_diffu_mean = np.mean(xi_diffus, axis=0)
     xi_diffu_std = np.std(xi_diffus, axis=0)
 
+    return xi_drift_mean, xi_drift_std, xi_diffu_mean, xi_diffu_std
+
+#%% 
+def mean_std_remove_outliers(values, outlier_std=3):
+    average = np.mean(values)
+    std = np.std(values)
+    mask = (values < (average + outlier_std*std)) * (values > (average - outlier_std*std))
+    values = values[mask]
+    while np.count_nonzero(~mask) > 0:
+        average = np.mean(values)
+        std = np.std(values)
+        mask = (values < (average + outlier_std*std)) * (values > (average - outlier_std*std))
+        values = values[mask]
+    return average, std
+# %%
+R_range = np.linspace(0, 1, 3)
+m_range = np.linspace(0, 2, 3)
+ep0_range = np.logspace(-7, -3, 3)
+ep1_range = np.linspace(0, 0.5, 3)
+np.savez(SCRATCH_PATH / 'RANGES.npz',
+         R_range=R_range,
+         m_range=m_range,
+         ep0_range=ep0_range,
+         ep1_range=ep1_range)
+
+R, m, ep0, ep1 = np.meshgrid(R_range, m_range, ep0_range, ep1_range, indexing='ij')
+# %%
+R_found = np.zeros_like(R)
+m_found = np.zeros_like(R)
+minus_one_found = np.zeros_like(R)
+ep0_found = np.zeros_like(R)
+ep1_found = np.zeros_like(R)
+
+dR = np.zeros_like(R)
+dm = np.zeros_like(R)
+dminus_one = np.zeros_like(R)
+dep0 = np.zeros_like(R)
+dep1 = np.zeros_like(R)
+#%%
+N_timesteps = 1_000_000
+N_bins = 20
+dt = 0.001
+NUM_DATASETS = 5
+NUM_CPUS = 5
+x_sym = sp.symbols('x')
+with Pool(NUM_CPUS) as p:
+    # results = p.map(do_run, list(zip(*np.unravel_index(range(R.size), R.shape))))
+    results = p.map(load_run, list(zip(*np.unravel_index(range(R.size), R.shape))))
+
+for Q in range(R.size):
+    I = np.unravel_index(Q, R.shape)
+
+    xi_drift_mean, xi_drift_std, xi_diffu_mean, xi_diffu_std = results[Q]
     R_found[I] = xi_drift_mean[0]
     m_found[I] = xi_drift_mean[1]
     minus_one_found[I] = xi_drift_mean[2]
@@ -345,10 +371,27 @@ for Q in range(R.size):
     dep0[I] = xi_diffu_std[0]
     dep1[I] = xi_diffu_std[1]
 
-# Do R plot
-for Q_name, Q in zip(['R', 'm', 'ep0', 'ep1'],[R, m, ep0, ep1]):
+for Q_name, Q, Q_short in zip(['R', 'm', 'ep0', 'ep1'],[R, m, ep0, ep1], [R_range, m_range, ep0_range, ep1_range]):
     for P_name, dP, P in zip(['R', 'm', 'ep0', 'ep1'], [dR, dm, dep0, dep1], [R_found, m_found, ep0_found, ep1_found]):
-        plt.plot(Q.flatten(), np.abs(dP / P).flatten())
-        plt.savefig(f'd{P_name}{P_name}_{Q_name}.png')
-
+        fig, ax = plt.subplots()
+        ax.plot(Q[P!=0].flatten(), np.abs(dP[P != 0] / P[P != 0]).flatten(), 'x')
+        # Average Value of |dP/P| for each value of Q
+        averages = []
+        stds = []
+        for uniq_Q in Q_short:
+            values = np.abs(dP[(Q == uniq_Q) * (P != 0)] / P[(Q == uniq_Q) * (P != 0)])
+            # average = np.mean(values)
+            # std = np.std(values)
+            average, std = mean_std_remove_outliers(values, 2)
+            averages.append(average)
+            stds.append(std)
+        ax.plot(Q[P!=0].flatten(), np.abs(dP[P != 0] / P[P != 0]).flatten(), 'bx')
+        ax.errorbar(Q_short, averages, stds, c='r', fmt='o')
+        ax.set_xlabel(Q_name)
+        ax.set_ylabel(f'd{P_name} / {P_name}')
+        if Q_name == 'ep0':
+            ax.set_xscale('log')
+        fig.savefig(FIG_PATH / f'd{P_name}{P_name}_{Q_name}.png')
+        ax.set_yscale('log')
+        fig.savefig(FIG_PATH / f'd{P_name}{P_name}_{Q_name}_log.png')
 
