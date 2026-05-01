@@ -10,14 +10,20 @@ from numpy.linalg import lstsq
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 
-from make_and_load_models import get_timeseries_and_KM, load_and_stack_KM
+from make_and_load_models import (
+    get_timeseries_and_KM,
+    load_and_stack_KM,
+    plot_timeseries,
+)
 from utils import jeffreys_divergence, SteadyFP
 
 # %%
-SCRATCH_PATH = Path(f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods/")
+SCRATCH_PATH = Path(
+    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_smaller_dt/"
+)
 SCRATCH_PATH.mkdir(parents=True, exist_ok=True)
 FIG_PATH = Path(
-    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_soft_triple/"
+    f"/home/zachuu/scratch/seismology/zach/softglass/compare_methods_smaller_dt/"
 )
 FIG_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -667,7 +673,7 @@ NUM_CPUS = 10
 dt = 0.001
 num_bins = 50
 target_metadata = {
-    "num_datapoints": 100_000_000,
+    "num_datapoints": 10_000_000,
     "dt": dt,
     "EVEN_ABS": False,
     "coeffs": None,  # fill in later for each equation
@@ -712,7 +718,7 @@ for equation_number in [2, 3, 6, 7]:  # range(len(equation_names)):
     diffusion[diffusion == 0.0] = np.nan
     KM = (centers, pdf, drift, diffusion)
 
-    timeseries_plots(FIG_PATH / folder, timeseries, folder, slice(0, 100_000, 1))
+    # timeseries_plots(FIG_PATH / folder, timeseries, folder, slice(0, 100_000, 1))
     del timeseries, val_timeseries
     KM_plots(FIG_PATH / folder, KM, folder)
 
