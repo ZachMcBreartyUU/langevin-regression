@@ -35,7 +35,7 @@ def _is_metadata_right(
         "ep1",
         "x0",
     ]
-    KM_checks = ["num_bins", "kernel"]
+    KM_checks = ["num_bins", "kernel", "bandwidth"]
     for check in timeseries_checks:
         if check not in metadata:
             return False, False
@@ -129,14 +129,7 @@ def generate_dataseries(
         calls.append((j, models_dir, metadata, metadata_is_right, True))
 
     with Pool(min(len(calls), NUM_CPUS)) as p:
-        mins_maxs = p.starmap(_generate_dataserie, calls)
-
-    mins_maxs = np.array(mins_maxs)[
-        :NUM_DATASETS
-    ]  # only include models, not validation
-    metadata["min_x"] = min(metadata["min_x"], np.min(mins_maxs[:, 0]))
-    metadata["max_x"] = max(metadata["max_x"], np.max(mins_maxs[:, 1]))
-    write_metadata(models_dir, metadata)
+        p.starmap(_generate_dataserie, calls)
 
 
 def load_timeseries(timeseries_path):
@@ -162,17 +155,26 @@ def load_and_stack_timeseries(models_dir, NUM_DATASETS, validation=False):
     return time_stack, x_stack
 
 
-def set_metadata_min_max(models_dir, NUM_DATASETS):
+def set_metadata_min_max(models_dir, NUM_DATASETS, EVEN_ABS=False):
     metadata = load_metadata(models_dir)
     _, x_data = load_timeseries(models_dir / f"timeseries_{0}.npz")
-    new_min = np.nanmin(x_data)
-    new_max = np.nanmax(x_data)
+    if EVEN_ABS:
+        new_max = np.nanmax(np.abs(x_data))
+        new_min = -new_max
+    else:
+        new_min = np.nanmin(x_data)
+        new_max = np.nanmax(x_data)
     for i in range(1, NUM_DATASETS):
         _, x_data = load_timeseries(models_dir / f"timeseries_{i}.npz")
-        self_min = np.nanmin(x_data)
-        self_max = np.nanmax(x_data)
-        new_min = max(new_min, self_min)
-        new_max = min(new_max, self_max)
+        if EVEN_ABS:
+            self_max = np.nanmax(np.abs(x_data))
+            new_max = min(new_max, self_max)
+            new_min = -new_max
+        else:
+            self_min = np.nanmin(x_data)
+            self_max = np.nanmax(x_data)
+            new_min = max(new_min, self_min)
+            new_max = min(new_max, self_max)
     metadata["min_x"] = new_min
     metadata["max_x"] = new_max
     write_metadata(models_dir, metadata)
@@ -216,6 +218,45 @@ def _generate_KM(i, edges, models_dir, metadata, metadata_is_right, validation=F
     )
 
 
+def _generate_KM_f(i, edges, models_dir, metadata, metadata_is_right, validation=False):
+    if validation:
+        KM_file_template = "validation_KM_f_{}.npz"
+        KM_file = f"validation_KM_f_{i}.npz"
+        timeseries_file = f"validation_{i}.npz"
+    else:
+        KM_file_template = "KM_f_{}.npz"
+        KM_file = f"KM_f_{i}.npz"
+        timeseries_file = f"timeseries_{i}.npz"
+
+    if metadata_is_right and _check_exists(models_dir, i, KM_file_template):
+        return
+    _, x_data = load_timeseries(models_dir / timeseries_file)
+
+    if metadata["kernel"] == "gaussian":
+        kernel = gaussian
+    else:
+        kernel = epanechnikov
+
+    if metadata["bandwidth"] == "default":
+        bw = None
+    else:
+        bw = metadata["bandwidth"]
+    kmc, centers = km(x_data[..., None] ** 2, bins=(edges,), powers=2, kernel=kernel, bw=bw)  # type: ignore
+    pdf, moment_1, moment_2 = kmc
+    centers = centers[0]
+    pdf /= np.nansum(pdf * (edges[1] - edges[0]))
+    moment_1 /= metadata["dt"]
+    moment_2 /= metadata["dt"]
+    print(f"Saving KM {i+1}", flush=True)
+    np.savez(
+        models_dir / KM_file,
+        centers=centers,
+        pdf=pdf,
+        moment_1=moment_1,
+        moment_2=moment_2,
+    )
+
+
 def generate_KM(
     models_dir,
     NUM_DATASETS,
@@ -229,7 +270,7 @@ def generate_KM(
     metadata = load_metadata(models_dir)
     if metadata["min_x"] == metadata["max_x"]:
         metadata["min_x"], metadata["max_x"] = set_metadata_min_max(
-            models_dir, NUM_DATASETS
+            models_dir, NUM_DATASETS, metadata["EVEN_ABS"]
         )
     if SUGGESTED_MIN_MAX is None:
         edges = np.linspace(
@@ -247,6 +288,42 @@ def generate_KM(
         calls.append((i, edges, models_dir, metadata, metadata_is_right, True))
     with Pool(min(len(calls), NUM_CPUS)) as p:
         p.starmap(_generate_KM, calls)
+
+
+def generate_KM_f(
+    models_dir,
+    NUM_DATASETS,
+    NUM_VALIDATION,
+    NUM_CPUS=1,
+    metadata_is_right=False,
+    SUGGESTED_MIN_MAX: Optional[tuple[float, float]] = None,
+):
+    # look at the min and max in the metadata
+    # file for hint to the bin edges
+    metadata = load_metadata(models_dir)
+    if metadata["min_x"] == metadata["max_x"]:
+        min_, max_ = set_metadata_min_max(
+            models_dir, NUM_DATASETS, metadata["EVEN_ABS"]
+        )
+        metadata["max_x"] = max(abs(min_), max_) ** 2
+        metadata["min_x"] = 0.0
+
+    if SUGGESTED_MIN_MAX is None:
+        edges = np.linspace(
+            metadata["min_x"], metadata["max_x"], metadata["num_bins"] + 1
+        )
+    else:
+        edges = np.linspace(
+            SUGGESTED_MIN_MAX[0], SUGGESTED_MIN_MAX[1], metadata["num_bins"] + 1
+        )
+        metadata_is_right = False
+    calls = []
+    for i in range(NUM_DATASETS):
+        calls.append((i, edges, models_dir, metadata, metadata_is_right, False))
+    for i in range(NUM_VALIDATION):
+        calls.append((i, edges, models_dir, metadata, metadata_is_right, True))
+    with Pool(min(len(calls), NUM_CPUS)) as p:
+        p.starmap(_generate_KM_f, calls)
 
 
 def load_KM(KM_path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -279,6 +356,27 @@ def load_and_stack_KM(models_dir, NUM_DATASETS, validation=False):
     return centers, pdf_stack, moment_1_stack, moment_2_stack
 
 
+def load_and_stack_KM_f(models_dir, NUM_DATASETS, validation=False):
+    centers = None
+    pdfs = []
+    moment_1_s = []
+    moment_2_s = []
+    for i in range(NUM_DATASETS):
+        if validation:
+            filename = f"validation_KM_f_{i}.npz"
+        else:
+            filename = f"KM_f_{i}.npz"
+        centers, pdf, moment_1, moment_2 = load_KM(models_dir / filename)
+        pdfs.append(pdf)
+        moment_1_s.append(moment_1)
+        moment_2_s.append(moment_2)
+    assert centers is not None
+    pdf_stack = np.stack(pdfs, axis=0)
+    moment_1_stack = np.stack(moment_1_s, axis=0)
+    moment_2_stack = np.stack(moment_2_s, axis=0)
+    return centers, pdf_stack, moment_1_stack, moment_2_stack
+
+
 def get_timeseries_and_KM(
     models_dir: Path,
     target_metadata: dict,
@@ -286,6 +384,7 @@ def get_timeseries_and_KM(
     NUM_VALIDATION_DATASETS=1,
     NUM_CPUS=1,
     SUGGESTED_MIN_MAX: Optional[tuple[float, float]] = None,
+    f=False,
 ):
     # Check if the models directory exists
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -304,20 +403,40 @@ def get_timeseries_and_KM(
         metadata_is_right=timeseries_meta_correct,
         NUM_CPUS=NUM_CPUS,
     )
-    generate_KM(
-        models_dir,
-        NUM_DATASETS,
-        NUM_VALIDATION_DATASETS,
-        NUM_CPUS=NUM_CPUS,
-        metadata_is_right=KM_meta_correct,
-        SUGGESTED_MIN_MAX=SUGGESTED_MIN_MAX,
-    )
-    return (
-        load_and_stack_timeseries(models_dir, NUM_DATASETS),
-        load_and_stack_KM(models_dir, NUM_DATASETS),
-        load_and_stack_timeseries(models_dir, NUM_VALIDATION_DATASETS, validation=True),
-        load_and_stack_KM(models_dir, NUM_VALIDATION_DATASETS, validation=True),
-    )
+    if f:
+        generate_KM_f(
+            models_dir,
+            NUM_DATASETS,
+            NUM_VALIDATION_DATASETS,
+            NUM_CPUS=NUM_CPUS,
+            metadata_is_right=KM_meta_correct,
+            SUGGESTED_MIN_MAX=SUGGESTED_MIN_MAX,
+        )
+        return (
+            load_and_stack_timeseries(models_dir, NUM_DATASETS),
+            load_and_stack_KM_f(models_dir, NUM_DATASETS),
+            load_and_stack_timeseries(
+                models_dir, NUM_VALIDATION_DATASETS, validation=True
+            ),
+            load_and_stack_KM_f(models_dir, NUM_VALIDATION_DATASETS, validation=True),
+        )
+    else:
+        generate_KM(
+            models_dir,
+            NUM_DATASETS,
+            NUM_VALIDATION_DATASETS,
+            NUM_CPUS=NUM_CPUS,
+            metadata_is_right=KM_meta_correct,
+            SUGGESTED_MIN_MAX=SUGGESTED_MIN_MAX,
+        )
+        return (
+            load_and_stack_timeseries(models_dir, NUM_DATASETS),
+            load_and_stack_KM(models_dir, NUM_DATASETS),
+            load_and_stack_timeseries(
+                models_dir, NUM_VALIDATION_DATASETS, validation=True
+            ),
+            load_and_stack_KM(models_dir, NUM_VALIDATION_DATASETS, validation=True),
+        )
 
 
 def generate_parameter_space(models_dirs, target_metadatas, NUM_DATASETS=1):
